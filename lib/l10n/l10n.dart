@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'strings_en.dart';
+import 'strings_ru.dart';
 import 'strings_zh.dart';
 
 /// Languages the UI ships with. Spanish is the source language: every `tr()`
@@ -10,7 +11,8 @@ import 'strings_zh.dart';
 enum AppLang {
   es('es', 'Español'),
   en('en', 'English'),
-  zh('zh', '中文');
+  zh('zh', '中文'),
+  ru('ru', 'Русский');
 
   const AppLang(this.code, this.label);
 
@@ -95,6 +97,7 @@ String tr(String source, [List<Object?>? args]) {
 const Map<AppLang, Map<String, String>> _tables = {
   AppLang.en: enStrings,
   AppLang.zh: zhStrings,
+  AppLang.ru: ruStrings,
 };
 
 /// Debug-only, so the same missing key isn't logged on every rebuild.

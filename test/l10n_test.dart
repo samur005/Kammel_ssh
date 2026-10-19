@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:terminal_agent/l10n/l10n.dart';
 import 'package:terminal_agent/l10n/strings_en.dart';
+import 'package:terminal_agent/l10n/strings_ru.dart';
 import 'package:terminal_agent/l10n/strings_zh.dart';
 
 void main() {
@@ -47,6 +48,7 @@ void main() {
   const tables = <String, Map<String, String>>{
     'strings_en.dart': enStrings,
     'strings_zh.dart': zhStrings,
+    'strings_ru.dart': ruStrings,
   };
 
   tables.forEach((name, table) {

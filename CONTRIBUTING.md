@@ -9,7 +9,7 @@ Thank you for your interest in contributing! Kammel is a young project and every
 - **Report bugs** using the [bug report template](../../issues/new/choose). Include your device, Android/Linux version, and steps to reproduce.
 - **Propose features** through a feature request issue *before* writing code, so we can discuss the approach.
 - **Improve docs** — READMEs, code comments, this file.
-- **Translate** — the UI ships in Spanish, English and Simplified Chinese. Spanish is
+- **Translate** — the UI ships in Spanish, English, Simplified Chinese and Russian. Spanish is
   the source language: every `tr('…')` key *is* the Spanish text, and a new language is
   one `strings_<code>.dart` table plus an entry in `AppLang`. A partial table is safe —
   anything missing falls back to Spanish.
