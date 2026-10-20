@@ -89,6 +89,30 @@ class ReleaseNote {
 /// shown as if it had shipped.
 const List<ReleaseNote> kChangelog = [
   ReleaseNote(
+    version: '2.12.0',
+    date: '2026-10-20',
+    changes: [
+      ChangeEntry(ChangeKind.added,
+          'Copias de seguridad cifradas con contraseña (Argon2id + XChaCha20-Poly1305); las copias antiguas sin cifrar se siguen importando.'),
+      ChangeEntry(ChangeKind.added,
+          'Sincronización con WebDAV de la copia cifrada, con resolución manual de conflictos.'),
+      ChangeEntry(ChangeKind.added,
+          'Llaves privadas con frase de paso: se pide al conectar y puede guardarse en el almacén seguro.'),
+      ChangeEntry(ChangeKind.added,
+          'Keepalive y tiempo de espera configurables, y reconexión automática con esperas crecientes.'),
+      ChangeEntry(ChangeKind.added,
+          'Monitor ampliado: swap, inodos, red, procesos, puertos en escucha, journal y alertas por umbral; comprobaciones de DNS, puerto TCP y certificado TLS.'),
+      ChangeEntry(ChangeKind.added,
+          'Logs de Docker en vivo con filtro; los secretos se ocultan en la inspección de contenedores.'),
+      ChangeEntry(ChangeKind.added,
+          'Tema Monokai, paleta de terminal propia, interlineado ajustable y resaltado opcional de la salida del terminal.'),
+      ChangeEntry(ChangeKind.added,
+          'Explorador SFTP: permisos y propietario visibles, y cambio de permisos (chmod).'),
+      ChangeEntry(ChangeKind.added,
+          'Editor más seguro: buscar y reemplazar, copia .bak y diferencias antes de guardar, y validación de JSON/YAML.'),
+    ],
+  ),
+  ReleaseNote(
     version: '2.11.0',
     date: '2026-10-20',
     changes: [
