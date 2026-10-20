@@ -81,7 +81,7 @@ FriendlyError describeError(Object error) {
     if (error is SSHKeyDecryptError) {
       return of(
         tr('La llave privada está protegida con contraseña.'),
-        tr('Kammel no puede descifrarla: usa una llave sin contraseña.'),
+        tr('Introduce su frase de paso al conectar (puedes guardarla en el almacén seguro).'),
       );
     }
     return of(

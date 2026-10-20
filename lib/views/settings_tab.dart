@@ -6,6 +6,8 @@ import '../services/app_lock.dart';
 import '../services/device_key.dart';
 import '../services/known_hosts.dart';
 import '../theme/app_theme.dart';
+import '../services/reconnect_policy.dart';
+import '../widgets/choice_row.dart';
 import '../widgets/swiss.dart';
 import 'backup_sheet.dart';
 import 'onboarding_sheet.dart';
@@ -109,6 +111,13 @@ class SettingsTab extends StatelessWidget {
                 onChanged: state.setTerminalKeyboardAutocorrect,
               ),
             ],
+          ),
+          const SizedBox(height: 16),
+
+          // ---- Connection ----------------------------------------------------
+          SwissPanel(
+            title: tr('Conexión'),
+            children: [_ConnectionPanel(state: state)],
           ),
           const SizedBox(height: 16),
 
@@ -625,6 +634,62 @@ class _KnownHostsPanelState extends State<_KnownHostsPanel> {
                 ),
               ],
             ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Keepalive, connect timeout and auto-reconnect.
+class _ConnectionPanel extends StatelessWidget {
+  final AppState state;
+  const _ConnectionPanel({required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = state.connectionTuning;
+    String secs(int v) => v == 0 ? tr('Desactivado') : tr('{0} s', [v]);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ChoiceRow<int>(
+          label: tr('KEEPALIVE SSH'),
+          description: tr('Cada cuánto se envía un ping al servidor para que la conexión no se corte por inactividad (NAT, firewalls).'),
+          values: ConnectionTuning.keepAliveChoices,
+          value: t.keepAliveSeconds,
+          labelFor: secs,
+          onChanged: (v) =>
+              state.setConnectionTuning(t.copyWith(keepAliveSeconds: v)),
+        ),
+        Hairline(),
+        ChoiceRow<int>(
+          label: tr('TIEMPO DE ESPERA DE CONEXIÓN'),
+          description: tr('Cuánto esperar a cada servidor (y a cada salto) antes de rendirse.'),
+          values: ConnectionTuning.timeoutChoices,
+          value: t.connectTimeoutSeconds,
+          labelFor: secs,
+          onChanged: (v) =>
+              state.setConnectionTuning(t.copyWith(connectTimeoutSeconds: v)),
+        ),
+        Hairline(),
+        ToggleRow(
+          label: tr('RECONEXIÓN AUTOMÁTICA'),
+          description: tr('Si la conexión se cae sin que la cierres, vuelve a conectar con esperas crecientes (1 s, 2 s, 4 s… hasta 60 s).'),
+          value: t.autoReconnect,
+          onChanged: (v) =>
+              state.setConnectionTuning(t.copyWith(autoReconnect: v)),
+        ),
+        if (t.autoReconnect) ...[
+          Hairline(),
+          ChoiceRow<int>(
+            label: tr('INTENTOS MÁXIMOS'),
+            description: tr('Después de tantos fallos seguidos deja de intentarlo.'),
+            values: ConnectionTuning.attemptChoices,
+            value: t.maxReconnectAttempts,
+            labelFor: (v) => '$v',
+            onChanged: (v) => state
+                .setConnectionTuning(t.copyWith(maxReconnectAttempts: v)),
           ),
         ],
       ],

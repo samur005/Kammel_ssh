@@ -22,6 +22,8 @@ import '../models/terminal_shortcut.dart';
 import '../models/terminal_key_layer.dart';
 import '../models/touch_pad.dart';
 import '../widgets/joystick_recognizer.dart';
+import '../services/key_unlock.dart';
+import '../services/reconnect_policy.dart';
 import '../services/file_error.dart';
 import '../theme/app_theme.dart';
 import '../models/agent_activity.dart';
@@ -188,6 +190,9 @@ class TerminalSession {
   // True while a reconnect attempt is in flight, so the banner button and the
   // on-resume sweep can't double-connect the same session.
   bool reconnecting = false;
+  // Auto-reconnect bookkeeping (see AppState._scheduleAutoReconnect).
+  Timer? autoReconnectTimer;
+  int autoReconnectAttempt = 0;
   // Why the last connection attempt failed (or why the live connection
   // dropped), classified for the UI. Cleared as soon as a connection succeeds,
   // so a banner can never show a stale reason. See [ConnectionError].
@@ -1763,6 +1768,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
+    _loadConnectionTuning(prefs);
 
     final modeIndex = prefs.getInt(_kThemeMode);
     if (modeIndex != null &&
@@ -2516,6 +2522,76 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   // ready. Reconnecting on launch by itself would open SSH connections (and
   // burn mobile data) without anyone asking for them.
 
+  // ---- Connection tuning: keepalive, timeouts, auto-reconnect --------------
+
+  static const _kKeepAlive = 'settings_ssh_keepalive_seconds';
+  static const _kConnectTimeout = 'settings_ssh_connect_timeout_seconds';
+  static const _kAutoReconnect = 'settings_auto_reconnect';
+  static const _kReconnectAttempts = 'settings_auto_reconnect_attempts';
+
+  ConnectionTuning _tuning = const ConnectionTuning();
+  ConnectionTuning get connectionTuning => _tuning;
+
+  /// Asks for a private key passphrase. Set by the UI in `main.dart`; null
+  /// means no prompt is possible and an encrypted key is skipped.
+  Future<({String value, bool remember})?> Function(String profileName,
+      {required bool retry})? passphrasePrompt;
+
+  Future<void> setConnectionTuning(ConnectionTuning t) async {
+    _tuning = t;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_kKeepAlive, t.keepAliveSeconds);
+    await prefs.setInt(_kConnectTimeout, t.connectTimeoutSeconds);
+    await prefs.setBool(_kAutoReconnect, t.autoReconnect);
+    await prefs.setInt(_kReconnectAttempts, t.maxReconnectAttempts);
+  }
+
+  void _loadConnectionTuning(SharedPreferences prefs) {
+    const d = ConnectionTuning();
+    _tuning = ConnectionTuning(
+      keepAliveSeconds: prefs.getInt(_kKeepAlive) ?? d.keepAliveSeconds,
+      connectTimeoutSeconds:
+          (prefs.getInt(_kConnectTimeout) ?? d.connectTimeoutSeconds)
+              .clamp(3, 120),
+      autoReconnect: prefs.getBool(_kAutoReconnect) ?? d.autoReconnect,
+      maxReconnectAttempts:
+          (prefs.getInt(_kReconnectAttempts) ?? d.maxReconnectAttempts)
+              .clamp(1, 50),
+    );
+  }
+
+  /// After an unexpected drop: retry with exponential backoff + jitter, up to
+  /// [ConnectionTuning.maxReconnectAttempts]. Never runs for a session the
+  /// user closed or disconnected on purpose (those never reach here).
+  void _scheduleAutoReconnect(TerminalSession session) {
+    if (!_tuning.autoReconnect || session.activeProfile == null) return;
+    session.autoReconnectTimer?.cancel();
+    if (session.autoReconnectAttempt >= _tuning.maxReconnectAttempts) {
+      session.terminal.write('\r\n${tr('Reconexión automática agotada tras {0} intentos.', [session.autoReconnectAttempt])}\r\n');
+      session.autoReconnectAttempt = 0;
+      return;
+    }
+    final delay = reconnectDelay(session.autoReconnectAttempt);
+    session.autoReconnectAttempt++;
+    session.terminal.write('\r\n${tr('Reconectando en {0} s (intento {1}/{2})…', [
+          (delay.inMilliseconds / 1000).toStringAsFixed(1),
+          session.autoReconnectAttempt,
+          _tuning.maxReconnectAttempts
+        ])}\r\n');
+    session.autoReconnectTimer = Timer(delay, () async {
+      if (!_sessions.contains(session)) return;
+      if (session.connectionStatus != ConnectionStatus.disconnected) return;
+      await reconnectSession(session);
+      if (!_sessions.contains(session)) return;
+      if (session.connectionStatus == ConnectionStatus.disconnected) {
+        _scheduleAutoReconnect(session);
+      } else {
+        session.autoReconnectAttempt = 0;
+      }
+    });
+  }
+
   static const String _kOpenSessions = 'open_sessions';
   static const String _kRestoreSessions = 'settings_restore_sessions';
 
@@ -3030,7 +3106,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   /// each `direct-tcpip` forward opened through the previous one. Per hop
   /// rather than for the whole chain, so a three-hop chain over a slow link
   /// isn't cut off halfway by a budget sized for one.
-  static const Duration _kHopTimeout = Duration(seconds: 15);
+  Duration get _kHopTimeout => _tuning.connectTimeout;
 
   /// Opens and authenticates a standalone [SSHClient] for [profile], without
   /// tying it to a terminal session. Non-fatal notices (missing device key,
@@ -3152,12 +3228,24 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     final profilePem = profile.privateKey;
     if (profilePem != null && profilePem.trim().isNotEmpty) {
       try {
-        // An encrypted PEM uses the profile password as its passphrase.
-        identities.addAll(SSHKeyPair.fromPem(
-            profilePem,
-            (profile.password?.isNotEmpty ?? false)
-                ? profile.password
-                : null));
+        // Encrypted keys: a remembered passphrase first, then the profile
+        // password (how older versions unlocked them), then ask.
+        final prompt = passphrasePrompt;
+        identities.addAll(await unlockPrivateKey(
+          profilePem,
+          candidates: [
+            await SecureStore.instance.readPassphrase(profile.id),
+            profile.password,
+          ],
+          ask: prompt == null
+              ? null
+              : ({required retry}) => prompt(profile.name, retry: retry),
+          remember: (p) => SecureStore.instance.writePassphrase(profile.id, p),
+        ));
+      } on KeyLockedError catch (e) {
+        onNotice?.call(e.cancelled
+            ? tr('Llave privada bloqueada: no se introdujo la frase de paso.')
+            : tr('Frase de paso incorrecta para la llave privada.'));
       } catch (e) {
         onNotice?.call(tr('No se pudo leer la llave privada del perfil: {0}', [e]));
       }
@@ -3168,6 +3256,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       username: profile.username,
       identities: identities.isEmpty ? null : identities,
       onPasswordRequest: () => profile.password ?? '',
+      keepAliveInterval: _tuning.keepAlive,
       // Host key pinning, per hop: each machine of the chain is checked and
       // pinned under its own host:port. Without this dartssh2 accepts any key,
       // so anyone able to intercept the connection could impersonate the server
@@ -3354,6 +3443,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       _seedCwdReporting(session);
 
       session.connectionStatus = ConnectionStatus.remote;
+      session.autoReconnectAttempt = 0;
       session.started = true;
       session.lastError = null;
       // A fresh shell is at its prompt. The watch loop takes over from here and
@@ -3408,6 +3498,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
               body: tr('Se cerró la conexión con {0}.', [session.name]),
               kind: AlertKind.disconnect);
           notifyListeners();
+          _scheduleAutoReconnect(session);
         }
       }).catchError((e) {
         if (session.connectionStatus == ConnectionStatus.remote) {
@@ -3421,6 +3512,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
               body: tr('Se perdió la conexión con {0}.', [session.name]),
               kind: AlertKind.disconnect);
           notifyListeners();
+          _scheduleAutoReconnect(session);
         }
       });
 
@@ -3499,6 +3591,9 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
   // Close an open session
   void closeSession(int index) {
+    if (index >= 0 && index < _sessions.length) {
+      _sessions[index].autoReconnectTimer?.cancel();
+    }
     if (index < 0 || index >= _sessions.length) return;
     final session = _sessions[index];
     _cleanupSession(session);
