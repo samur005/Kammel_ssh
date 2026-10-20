@@ -73,7 +73,8 @@ class _ConnectionsTabState extends State<ConnectionsTab> {
         children: [
           ScreenHeader(
             tr('Workspace'),
-            eyebrow: 'KAMMEL SSH',
+            eyebrow: 'ABSssh',
+            eyebrowKeepCase: true,
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [

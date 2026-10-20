@@ -1,6 +1,6 @@
-# Contributing to Kammel
+# Contributing to ABSssh
 
-Thank you for your interest in contributing! Kammel is a young project and every kind of contribution helps: bug reports, feature ideas, documentation, translations, and of course code.
+Thank you for your interest in contributing! ABSssh is a young project and every kind of contribution helps: bug reports, feature ideas, documentation, translations, and of course code.
 
 *¿Prefieres escribir en español? Ningún problema — los issues y PRs en español son bienvenidos.*
 

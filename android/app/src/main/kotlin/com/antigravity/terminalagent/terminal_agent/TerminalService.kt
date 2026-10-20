@@ -33,7 +33,7 @@ class TerminalService : Service() {
         /** True between onCreate and onDestroy. */
         @Volatile var isRunning = false
 
-        // Channel id kept from the Kammel era: renaming it would create a new
+        // Channel id kept from the ABSssh era: renaming it would create a new
         // channel and drop the user's per-channel notification settings.
         private const val CHANNEL_ID = "kammel_background"
         private const val NOTIFICATION_ID = 1001

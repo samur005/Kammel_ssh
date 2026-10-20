@@ -26,14 +26,14 @@ class MenuDrawer extends StatelessWidget {
               child: Row(
                 children: [
                   Image.asset(
-                    'assets/images/kammel_logo.png',
+                    'assets/images/absssh_logo.png',
                     width: 24,
                     color: AppColors.accent,
                     filterQuality: FilterQuality.medium,
                   ),
                   const SizedBox(width: 10),
                   Text(
-                    tr('KAMMEL SSH - MENÚ'),
+                    tr('ABSssh - MENÚ'),
                     style: AppText.label(12, color: AppColors.bone, spacing: 1.5),
                   ),
                 ],
@@ -192,7 +192,7 @@ class MenuDrawer extends StatelessWidget {
                       final info = snapshot.data;
                       final version = info != null ? '${info.version}+${info.buildNumber}' : '…';
                       return Text(
-                        'KAMMEL SSH v$version',
+                        'ABSssh v$version',
                         style: AppText.mono(8, color: AppColors.muted),
                       );
                     },

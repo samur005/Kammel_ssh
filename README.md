@@ -1,20 +1,21 @@
 <div align="center">
 
-<img src="public/icon/iconog.png" width="260" alt="KAMMEL SSH">
+<img src="public/icon/iconog.png" width="260" alt="ABSssh">
 
-# KAMMEL SSH
+# ABSssh
+
+> ABSssh is a fork of [Jhongdlp/Kammel_ssh](https://github.com/Jhongdlp/Kammel_ssh) (formerly KAMMEL SSH).
 
 **An SSH client built for driving AI coding agents from your phone.**
 
 Multi-session terminal · SFTP explorer · code editor · Docker & database console — in one Flutter app for Android and Linux.
 
-[Leer en español](README.es.md) · [kammel.app](https://www.kammel.app/)
+[Leer en español](README.es.md)
 
-[![Website](https://img.shields.io/badge/web-kammel.app-007AFF)](https://www.kammel.app/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Flutter](https://img.shields.io/badge/Flutter-3.44-02569B?logo=flutter)](https://flutter.dev)
 [![Platforms](https://img.shields.io/badge/platforms-Android%20%7C%20Linux-green)]()
-[![Latest release](https://img.shields.io/github/v/release/Jhongdlp/Kammel_ssh?label=download)](https://github.com/Jhongdlp/Kammel_ssh/releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/samur005/Kammel_ssh?label=download)](https://github.com/samur005/Kammel_ssh/releases/latest)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 </div>
@@ -23,7 +24,7 @@ Multi-session terminal · SFTP explorer · code editor · Docker & database cons
 
 ## What it is
 
-`ssh` on a phone is usually a compromise: no keyboard, no notifications, and the session dies the moment you switch apps. KAMMEL SSH is built around the one workload where that hurts most — **running a TUI coding agent (Claude Code, Codex, Aider, Gemini CLI…) on a remote server** and babysitting it from your pocket.
+`ssh` on a phone is usually a compromise: no keyboard, no notifications, and the session dies the moment you switch apps. ABSssh is built around the one workload where that hurts most — **running a TUI coding agent (Claude Code, Codex, Aider, Gemini CLI…) on a remote server** and babysitting it from your pocket.
 
 So it keeps the shell alive in the background, **notifies you when the agent stops and needs an answer**, and gives you a touch keyboard, a file explorer, an editor and a git panel so you never have to type a path by hand.
 
@@ -85,7 +86,7 @@ It is also a perfectly ordinary, fast SSH client if you just want a shell.
 
 ## 📦 Install
 
-**Android:** grab the APK from the [latest release](https://github.com/Jhongdlp/Kammel_ssh/releases/latest). After that the app updates itself.
+**Android:** grab the APK from the [latest release](https://github.com/samur005/Kammel_ssh/releases/latest). After that the app updates itself.
 
 **Linux:** build from source (below).
 
@@ -109,7 +110,7 @@ It is also a perfectly ordinary, fast SSH client if you just want a shell.
 ### Build and run
 
 ```bash
-git clone https://github.com/Jhongdlp/Kammel_ssh.git
+git clone https://github.com/samur005/Kammel_ssh.git
 cd Kammel_ssh
 
 flutter pub get
@@ -173,7 +174,7 @@ See [CLAUDE.md](CLAUDE.md) for a deeper walkthrough.
 
 ## 🔒 Privacy
 
-KAMMEL SSH talks to your servers and to the GitHub Releases API (update check). Nothing else. There is no telemetry, no account, and no backend — credentials never leave the device.
+ABSssh talks to your servers and to the GitHub Releases API (update check). Nothing else. There is no telemetry, no account, and no backend — credentials never leave the device.
 
 ## 🗺 Roadmap
 
@@ -192,13 +193,13 @@ Still open:
 - [ ] Find agents running in detached `tmux` sessions, not just open tabs
 - [ ] SFTP transfers that resume after a dropped connection
 
-Have an idea? [Open an issue](https://github.com/Jhongdlp/Kammel_ssh/issues/new).
+Have an idea? [Open an issue](https://github.com/samur005/Kammel_ssh/issues/new).
 
 ## 🤝 Contributing
 
 Contributions are very welcome — read [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow, coding conventions and environment setup.
 
-Found a security issue? Please report it privately through [GitHub Security Advisories](https://github.com/Jhongdlp/Kammel_ssh/security/advisories/new) rather than a public issue.
+Found a security issue? Please report it privately through [GitHub Security Advisories](https://github.com/samur005/Kammel_ssh/security/advisories/new) rather than a public issue.
 
 ## 📄 License
 

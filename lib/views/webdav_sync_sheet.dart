@@ -232,7 +232,7 @@ class _WebDavSyncSheetState extends State<_WebDavSyncSheet> {
               autocorrect: false,
               decoration: InputDecoration(
                   labelText: tr('URL DE LA CARPETA WEBDAV'),
-                  hintText: 'https://cloud.example.com/remote.php/dav/files/me/kammel/'),
+                  hintText: 'https://cloud.example.com/remote.php/dav/files/me/absssh/'),
             ),
             const SizedBox(height: 10),
             TextField(

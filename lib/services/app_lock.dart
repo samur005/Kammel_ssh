@@ -6,7 +6,7 @@ import '../l10n/l10n.dart';
 /// Wraps [LocalAuthentication] for the optional app lock. The lock uses the
 /// device biometric (fingerprint/face) as the primary factor and falls back to
 /// the phone's own screen-lock credential (PIN/pattern/password) — there is no
-/// KAMMEL-specific PIN, so nothing secret is stored by this layer.
+/// ABSssh-specific PIN, so nothing secret is stored by this layer.
 class AppLock {
   AppLock._();
   static final AppLock instance = AppLock._();
@@ -29,7 +29,7 @@ class AppLock {
   Future<bool> authenticate() async {
     try {
       return await _auth.authenticate(
-        localizedReason: tr('Desbloquea KAMMEL SSH para continuar'),
+        localizedReason: tr('Desbloquea ABSssh para continuar'),
         options: const AuthenticationOptions(
           // Allow the phone's PIN/pattern/password as a fallback, not just
           // biometrics.
@@ -40,7 +40,7 @@ class AppLock {
         ),
         authMessages: [
           AndroidAuthMessages(
-            signInTitle: tr('Desbloquear KAMMEL SSH'),
+            signInTitle: tr('Desbloquear ABSssh'),
             biometricHint: '',
             cancelButton: tr('Cancelar'),
             deviceCredentialsRequiredTitle: tr('Bloqueo no configurado'),

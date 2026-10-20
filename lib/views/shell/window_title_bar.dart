@@ -69,8 +69,8 @@ class _WindowTitleBarState extends State<WindowTitleBar> with WindowListener {
     // the connection state actually changes.
     final label = context.select<AppState, String>((state) {
       final profile = state.activeSession?.activeProfile;
-      if (profile == null) return 'KAMMEL SSH';
-      return 'KAMMEL — ${profile.username}@${profile.host}';
+      if (profile == null) return 'ABSssh';
+      return 'ABSssh — ${profile.username}@${profile.host}';
     });
     final hasSession =
         context.select<AppState, bool>((state) => state.activeSession != null);
@@ -116,7 +116,7 @@ class _WindowTitleBarState extends State<WindowTitleBar> with WindowListener {
                     children: [
                       const SizedBox(width: 10),
                       Image.asset(
-                        'assets/images/kammel_logo.png',
+                        'assets/images/absssh_logo.png',
                         width: 13,
                         height: 13,
                         color: AppColors.accent,

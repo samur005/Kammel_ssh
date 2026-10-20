@@ -104,7 +104,26 @@ void main() {
         'Basic ${base64.encode(utf8.encode('u:p'))}');
     expect(put.headers['If-None-Match'], '*');
     expect(put.url.toString(),
-        'https://dav.example/kammel/kammel-sync.enc.json');
+        'https://dav.example/kammel/absssh-sync.enc.json');
+  });
+
+  test('reads the legacy kammel-sync file and migrates to the new name',
+      () async {
+    final dav = _FakeDav();
+    final old = _Device(dav, 'from old app');
+    await old.engine().sync();
+    // Simulate a cloud written by a pre-rename version.
+    dav.files['kammel-sync.enc.json'] = dav.files.remove('absssh-sync.enc.json')!;
+    dav.tags['kammel-sync.enc.json'] = dav.tags.remove('absssh-sync.enc.json')!;
+    final fresh = _Device(dav, 'from old app');
+    fresh.value = 'other';
+    fresh.state = const SyncState(); // new device, never synced
+    fresh.choice = SyncConflictChoice.keepCloud;
+    expect(await fresh.engine().sync(), SyncOutcome.keptCloud);
+    expect(fresh.value, 'from old app');
+    fresh.value = 'edited';
+    expect(await fresh.engine().sync(), SyncOutcome.uploaded);
+    expect(dav.files['absssh-sync.enc.json'], contains('edited'));
   });
 
   group('both sides changed', () {
@@ -127,14 +146,14 @@ void main() {
       expect(await b.engine().sync(), SyncOutcome.cancelled);
       expect(b.conflicts, 1);
       expect(b.value, 'from B');
-      expect(dav.files['kammel-sync.enc.json'], contains('from A'));
+      expect(dav.files['absssh-sync.enc.json'], contains('from A'));
     });
 
     test('keep local uploads this device', () async {
       final (a, b, dav) = await diverge();
       b.choice = SyncConflictChoice.keepLocal;
       expect(await b.engine().sync(), SyncOutcome.keptLocal);
-      expect(dav.files['kammel-sync.enc.json'], contains('from B'));
+      expect(dav.files['absssh-sync.enc.json'], contains('from B'));
       expect(await a.engine().sync(), SyncOutcome.downloaded);
       expect(a.value, 'from B');
     });
@@ -153,7 +172,7 @@ void main() {
       expect(await b.engine().sync(), SyncOutcome.keptBoth);
       expect(b.value, 'from A');
       final copy = dav.files.keys
-          .firstWhere((k) => k.startsWith('kammel-sync-conflict-'));
+          .firstWhere((k) => k.startsWith('absssh-sync-conflict-'));
       expect(dav.files[copy], contains('from B'));
     });
   });

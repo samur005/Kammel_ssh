@@ -982,7 +982,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   // ---- App lock --------------------------------------------------------
   // When enabled, a biometric/device-credential gate is shown before the app
   // shell on cold start (see LockGate in main.dart). The unlock uses the phone's
-  // biometric with a fallback to its screen-lock credential; no KAMMEL-specific
+  // biometric with a fallback to its screen-lock credential; no ABSssh-specific
   // secret is stored.
   bool _appLockEnabled = false;
   bool get appLockEnabled => _appLockEnabled;
@@ -2615,7 +2615,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   // ---- Session restore ------------------------------------------------------
-  // Which sessions were open when the app was last used, so closing KAMMEL (or
+  // Which sessions were open when the app was last used, so closing ABSssh (or
   // Android killing it in the background) doesn't lose the set of servers being
   // worked on. Only the profile and the tab name are stored — a terminal buffer
   // is not something to persist, and the server's own state is what tmux is for.
@@ -3547,7 +3547,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
         session.sshSession = await session.sshClient!.execute(
           'command -v tmux >/dev/null 2>&1 '
           "&& exec tmux new-session -A -s '${profile.tmuxSessionName}' "
-          '|| { echo "[KAMMEL] tmux no está instalado en el servidor; abriendo shell normal."; '
+          '|| { echo "[ABSssh] tmux no está instalado en el servidor; abriendo shell normal."; '
               'exec "\${SHELL:-sh}" -l; }',
           pty: pty,
         );
@@ -4939,15 +4939,15 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       if (Platform.isAndroid) await _ensureStoragePermission();
 
       // Destination: the folder the user picked, or — as a fallback — the
-      // public Downloads/KAMMEL on Android, ~/Downloads/KAMMEL elsewhere.
+      // public Downloads/ABSssh on Android, ~/Downloads/ABSssh elsewhere.
       final String finalDir;
       if (destDir != null && destDir.isNotEmpty) {
         finalDir = destDir;
       } else if (Platform.isAndroid) {
-        finalDir = '/storage/emulated/0/Download/KAMMEL';
+        finalDir = '/storage/emulated/0/Download/ABSssh';
       } else {
         final base = await getApplicationDocumentsDirectory();
-        finalDir = '${base.path}/Downloads/KAMMEL';
+        finalDir = '${base.path}/Downloads/ABSssh';
       }
       _downloadDestDir = finalDir;
 
@@ -4956,7 +4956,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
         // create() succeeds on a read-only path on some Android volumes; only a
         // real write proves the folder is usable, and failing here (instead of
         // on the first file) keeps the error understandable.
-        final probe = File('$finalDir/.kammel_write_test');
+        final probe = File('$finalDir/.absssh_write_test');
         await probe.writeAsBytes(const [0]);
         await probe.delete();
       } catch (e) {

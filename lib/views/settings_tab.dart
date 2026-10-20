@@ -174,7 +174,7 @@ class SettingsTab extends StatelessWidget {
                         style: AppText.label(9, color: AppColors.muted)),
                     const SizedBox(height: 5),
                     Text(
-                      tr('Todo lo que KAMMEL hace con un gesto o una combinación de teclas, en una sola pantalla.'),
+                      tr('Todo lo que ABSssh hace con un gesto o una combinación de teclas, en una sola pantalla.'),
                       style: AppText.label(8.5,
                           color: AppColors.faint, spacing: 0.3),
                     ),
@@ -243,7 +243,7 @@ class SettingsTab extends StatelessWidget {
               ToggleRow(
                 label: tr('BLOQUEO DE LA APLICACIÓN'),
                 description:
-                    tr('Pide tu huella (o el bloqueo del teléfono) al abrir KAMMEL SSH, para proteger tus conexiones y claves guardadas.'),
+                    tr('Pide tu huella (o el bloqueo del teléfono) al abrir ABSssh, para proteger tus conexiones y claves guardadas.'),
                 value: appLockEnabled,
                 onChanged: (value) => _onAppLockChanged(context, state, value),
               ),
@@ -605,7 +605,7 @@ class _KnownHostsPanelState extends State<_KnownHostsPanel> {
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
           child: Text(
             hosts.isEmpty
-                ? tr('Aún no has confiado en ningún servidor. La primera vez que te conectes a cada uno, KAMMEL te mostrará su huella para que la confirmes.')
+                ? tr('Aún no has confiado en ningún servidor. La primera vez que te conectes a cada uno, ABSssh te mostrará su huella para que la confirmes.')
                 : tr('Huellas guardadas. Si alguna cambia sin motivo, la conexión se bloquea: puede ser un intento de suplantación.'),
             style: AppText.body(11, color: AppColors.muted),
           ),

@@ -74,6 +74,10 @@ echo "==> building release APK…"
 "$FLUTTER" build apk --release
 apk="build/app/outputs/flutter-apk/app-release.apk"
 [ -f "$apk" ] || { echo "error: APK not found at $apk" >&2; exit 1; }
+# Publish under the app's name (ABSssh-v<version>.apk).
+named="build/app/outputs/flutter-apk/ABSssh-$tag.apk"
+cp "$apk" "$named"
+apk="$named"
 
 # --- commit + tag + push the version bump ---------------------------------
 git add pubspec.yaml

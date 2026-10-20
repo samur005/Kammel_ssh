@@ -45,7 +45,7 @@ void main() {
 
     final line = DeviceKey.publicLineForTest(publicKey);
     expect(line, startsWith('ssh-ed25519 '));
-    expect(line, endsWith(' kammel@device'));
+    expect(line, endsWith(' absssh@device'));
 
     // The base64 blob must decode to {string "ssh-ed25519", string pub}.
     final blob = base64.decode(line.split(' ')[1]);

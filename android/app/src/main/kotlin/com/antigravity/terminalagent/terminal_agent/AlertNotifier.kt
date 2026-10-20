@@ -128,7 +128,7 @@ object AlertNotifier {
         "opencode" -> Color.parseColor("#4B5563")     // Graphite
         "cursor" -> Color.parseColor("#374151")       // Slate
         "qwen" -> Color.parseColor("#6156E6")         // Qwen violet
-        else -> Color.parseColor("#007AFF")           // KAMMEL azure
+        else -> Color.parseColor("#007AFF")           // ABSssh azure
     }
 
     /**

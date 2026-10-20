@@ -55,7 +55,7 @@ const List<_Card> _cards = [
   _Card(
     Icons.dns_outlined,
     'Tus servidores, en el bolsillo',
-    'KAMMEL conecta por SSH y te da la terminal, los archivos por SFTP, un editor de código y un panel de Git del servidor. Todo sobre la misma conexión.',
+    'ABSssh conecta por SSH y te da la terminal, los archivos por SFTP, un editor de código y un panel de Git del servidor. Todo sobre la misma conexión.',
     [
       'Guarda un servidor una vez y conéctate de un toque.',
       'Pega un comando ssh completo y se rellena solo.',
@@ -76,7 +76,7 @@ const List<_Card> _cards = [
   _Card(
     Icons.notifications_active_outlined,
     'Pensada para agentes de IA',
-    'Si dejas a Claude Code (o cualquier TUI) trabajando y sales de la app, KAMMEL vigila la pantalla y te avisa.',
+    'Si dejas a Claude Code (o cualquier TUI) trabajando y sales de la app, ABSssh vigila la pantalla y te avisa.',
     [
       'Notificación cuando el agente termina o te hace una pregunta.',
       'Guarda prompts reutilizables con variables.',
@@ -114,7 +114,7 @@ class _OnboardingState extends State<_Onboarding> {
             padding: const EdgeInsets.fromLTRB(16, 14, 8, 0),
             child: Row(
               children: [
-                Text('KAMMEL SSH',
+                Text('ABSssh',
                     style:
                         AppText.mono(10, color: AppColors.muted, spacing: 2)),
                 const Spacer(),

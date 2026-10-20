@@ -43,7 +43,7 @@ class AboutTab extends StatelessWidget {
                     ),
                     child: Center(
                       child: Image.asset(
-                        'assets/images/kammel_logo.png',
+                        'assets/images/absssh_logo.png',
                         width: 56,
                         color: AppColors.accent,
                         filterQuality: FilterQuality.medium,
@@ -52,7 +52,7 @@ class AboutTab extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'KAMMEL SSH',
+                    'ABSssh',
                     style: AppText.display(26, color: AppColors.bone),
                   ),
                   const SizedBox(height: 6),
@@ -70,11 +70,11 @@ class AboutTab extends StatelessWidget {
           SwissPanel(
             title: tr('Detalles de la Aplicación'),
             children: [
-              _InfoRow(label: tr('APLICACIÓN'), value: 'KAMMEL SSH'),
+              _InfoRow(label: tr('APLICACIÓN'), value: 'ABSssh'),
               Hairline(),
               _InfoRow(label: tr('PAQUETE'), value: 'terminal_agent'),
               Hairline(),
-              _InfoRow(label: tr('SITIO WEB'), value: 'kammel.app'),
+              _InfoRow(label: tr('REPOSITORIO'), value: 'github.com/samur005/Kammel_ssh'),
               Hairline(),
               const _VersionRow(),
               Hairline(),

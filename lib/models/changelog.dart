@@ -89,6 +89,22 @@ class ReleaseNote {
 /// shown as if it had shipped.
 const List<ReleaseNote> kChangelog = [
   ReleaseNote(
+    version: '2.13.0',
+    date: '2026-10-20',
+    changes: [
+      ChangeEntry(ChangeKind.improved,
+          'La app ahora se llama ABSssh, con icono nuevo. Tus datos, copias y sincronización se conservan.'),
+      ChangeEntry(ChangeKind.fixed,
+          'El resaltado de la salida del terminal no se veía al activarlo: ahora colorea la salida nueva en las sesiones en vivo, también con tmux.'),
+      ChangeEntry(ChangeKind.fixed,
+          'La notificación de segundo plano, sus botones y los canales de avisos siguen el idioma de la app.'),
+      ChangeEntry(ChangeKind.fixed,
+          'Los títulos largos (p. ej. «Рабочая область») ya no se cortan.'),
+      ChangeEntry(ChangeKind.improved,
+          'Las actualizaciones dentro de la app llegan desde el repositorio samur005/Kammel_ssh.'),
+    ],
+  ),
+  ReleaseNote(
     version: '2.12.0',
     date: '2026-10-20',
     changes: [

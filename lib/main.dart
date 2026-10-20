@@ -35,7 +35,7 @@ Future<void> main() async {
       WindowOptions(
         size: geometry.size,
         minimumSize: WindowGeometry.minimumSize,
-        title: 'KAMMEL SSH',
+        title: 'ABSssh',
         // The app draws its own title bar (WindowTitleBar). Applied here,
         // inside waitUntilReadyToShow, so the GTK header bar is gone before
         // the window is ever put on screen instead of flashing first.
@@ -155,7 +155,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     return ValueListenableBuilder<AppLang>(
       valueListenable: L10n.notifier,
       builder: (context, lang, _) => MaterialApp(
-        title: 'KAMMEL SSH',
+        title: 'ABSssh',
         navigatorKey: navigatorKey,
         debugShowCheckedModeBanner: false,
         locale: Locale(lang.code),
