@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:terminal_agent/l10n/l10n.dart';
 import 'package:terminal_agent/l10n/strings_en.dart';
+import 'package:terminal_agent/l10n/strings_ru.dart';
 import 'package:terminal_agent/l10n/strings_zh.dart';
 import 'package:terminal_agent/models/changelog.dart';
 
@@ -56,6 +57,13 @@ void main() {
       }
     });
 
+    test('every entry has a Russian translation', () {
+      for (final text in texts) {
+        expect(ruStrings.containsKey(text), isTrue,
+            reason: 'no Russian translation for: $text');
+      }
+    });
+
     test('the kind labels are translated too', () {
       for (final kind in ChangeKind.values) {
         L10n.notifier.value = AppLang.es;
@@ -64,6 +72,8 @@ void main() {
             reason: 'no English translation for kind label: $spanish');
         expect(zhStrings.containsKey(spanish), isTrue,
             reason: 'no Chinese translation for kind label: $spanish');
+        expect(ruStrings.containsKey(spanish), isTrue,
+            reason: 'no Russian translation for kind label: $spanish');
       }
     });
   });

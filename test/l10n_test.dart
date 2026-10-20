@@ -1,7 +1,10 @@
+import 'dart:ui' show Locale;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:terminal_agent/l10n/l10n.dart';
 import 'package:terminal_agent/l10n/strings_en.dart';
+import 'package:terminal_agent/l10n/strings_ru.dart';
 import 'package:terminal_agent/l10n/strings_zh.dart';
 
 void main() {
@@ -47,6 +50,7 @@ void main() {
   const tables = <String, Map<String, String>>{
     'strings_en.dart': enStrings,
     'strings_zh.dart': zhStrings,
+    'strings_ru.dart': ruStrings,
   };
 
   tables.forEach((name, table) {
@@ -87,5 +91,71 @@ void main() {
     }
     expect(AppLang.fromCode(null), AppLang.es);
     expect(AppLang.fromCode('klingon'), AppLang.es);
+  });
+
+  group('device language', () {
+    tearDown(() {
+      L10n.systemLocales = () => const [Locale('es')];
+      L10n.followsSystem.value = true;
+    });
+
+    test('matches on the language code, in preference order', () {
+      expect(AppLang.fromLocales(const [Locale('ru', 'RU')]), AppLang.ru);
+      expect(AppLang.fromLocales(const [Locale('en', 'GB')]), AppLang.en);
+      expect(
+          AppLang.fromLocales(const [
+            Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant')
+          ]),
+          AppLang.zh);
+      expect(AppLang.fromLocales(const [Locale('de'), Locale('ru')]),
+          AppLang.ru);
+    });
+
+    test('falls back to Spanish when nothing is supported', () {
+      expect(AppLang.fromLocales(const [Locale('de'), Locale('fr')]),
+          AppLang.es);
+      expect(AppLang.fromLocales(const []), AppLang.es);
+    });
+
+    test('first launch follows the device', () async {
+      L10n.systemLocales = () => const [Locale('ru', 'RU')];
+      await L10n.load();
+      expect(L10n.lang, AppLang.ru);
+      expect(L10n.followsSystem.value, isTrue);
+    });
+
+    test('an unsupported device language keeps the Spanish default', () async {
+      L10n.systemLocales = () => const [Locale('de', 'DE')];
+      await L10n.load();
+      expect(L10n.lang, AppLang.es);
+    });
+
+    test('an explicit choice wins over the device language', () async {
+      SharedPreferences.setMockInitialValues({'app_language': 'en'});
+      L10n.systemLocales = () => const [Locale('ru')];
+      await L10n.load();
+      expect(L10n.lang, AppLang.en);
+      expect(L10n.followsSystem.value, isFalse);
+      L10n.onSystemLocalesChanged();
+      expect(L10n.lang, AppLang.en);
+    });
+
+    test('"System" is persisted and tracks device changes', () async {
+      L10n.systemLocales = () => const [Locale('zh')];
+      await L10n.setLang(AppLang.en);
+      await L10n.useSystem();
+      expect(L10n.lang, AppLang.zh);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('app_language'), L10n.systemCode);
+
+      L10n.systemLocales = () => const [Locale('ru')];
+      L10n.onSystemLocalesChanged();
+      expect(L10n.lang, AppLang.ru);
+
+      L10n.systemLocales = () => const [Locale('en')];
+      await L10n.load();
+      expect(L10n.lang, AppLang.en);
+      expect(L10n.followsSystem.value, isTrue);
+    });
   });
 }

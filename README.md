@@ -180,7 +180,7 @@ KAMMEL SSH talks to your servers and to the GitHub Releases API (update check). 
 Shipped since this list was last written:
 
 - [x] Dynamic (`-D`, SOCKS5) and remote (`-R`) tunnels, with per-tunnel idle timeouts
-- [x] Full UI translation — Spanish, English and Simplified Chinese
+- [x] Full UI translation — Spanish, English, Simplified Chinese and Russian
 - [x] Jump hosts (`ProxyJump`), with per-hop host-key pinning
 - [x] A real test suite (270+ tests; `flutter test`)
 

@@ -307,50 +307,76 @@ class _LanguagePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final current = L10n.lang;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
-          child: Text(
-            tr('Cambia el idioma de la interfaz. Los mensajes que escribe el servidor en la terminal no se traducen.'),
-            style: AppText.body(11, color: AppColors.muted),
-          ),
-        ),
-        for (final lang in AppLang.values) ...[
-          Hairline(),
-          InkWell(
-            onTap: () => L10n.setLang(lang),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-              child: Row(
-                children: [
-                  Icon(
-                    lang == current
-                        ? Icons.radio_button_checked
-                        : Icons.radio_button_unchecked,
-                    size: 16,
-                    color:
-                        lang == current ? AppColors.bone : AppColors.hairline,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      lang.label,
-                      style: AppText.label(11,
-                          color: lang == current
-                              ? AppColors.bone
-                              : AppColors.muted),
-                    ),
-                  ),
-                  MonoTag(lang.code.toUpperCase()),
-                ],
+    // "System" can resolve to the language already showing, which changes
+    // nothing in [L10n.notifier] and so remounts nothing: listen to the
+    // follow-system flag directly so the radio still moves.
+    return ValueListenableBuilder<bool>(
+      valueListenable: L10n.followsSystem,
+      builder: (context, followsSystem, _) {
+        final current = L10n.lang;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+              child: Text(
+                tr('Cambia el idioma de la interfaz. Los mensajes que escribe el servidor en la terminal no se traducen.'),
+                style: AppText.body(11, color: AppColors.muted),
               ),
             ),
-          ),
-        ],
-      ],
+            Hairline(),
+            _row(
+              label: tr('Idioma del sistema'),
+              tag: L10n.systemLang.code.toUpperCase(),
+              selected: followsSystem,
+              onTap: L10n.useSystem,
+            ),
+            for (final lang in AppLang.values) ...[
+              Hairline(),
+              _row(
+                label: lang.label,
+                tag: lang.code.toUpperCase(),
+                selected: !followsSystem && lang == current,
+                onTap: () => L10n.setLang(lang),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _row({
+    required String label,
+    required String tag,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+        child: Row(
+          children: [
+            Icon(
+              selected
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_unchecked,
+              size: 16,
+              color: selected ? AppColors.bone : AppColors.hairline,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                label,
+                style: AppText.label(11,
+                    color: selected ? AppColors.bone : AppColors.muted),
+              ),
+            ),
+            MonoTag(tag),
+          ],
+        ),
+      ),
     );
   }
 }

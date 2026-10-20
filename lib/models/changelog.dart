@@ -89,6 +89,15 @@ class ReleaseNote {
 /// shown as if it had shipped.
 const List<ReleaseNote> kChangelog = [
   ReleaseNote(
+    version: '2.11.0',
+    date: '2026-10-20',
+    changes: [
+      ChangeEntry(ChangeKind.added, 'La app habla ruso.'),
+      ChangeEntry(ChangeKind.added,
+          'Si no eliges un idioma, la app usa el del dispositivo (español, inglés, chino o ruso). Nueva opción «Idioma del sistema» en Ajustes.'),
+    ],
+  ),
+  ReleaseNote(
     version: '2.10.2',
     date: '2026-08-27',
     changes: [

@@ -1192,4 +1192,7 @@ const Map<String, String> zhStrings = {
   'ÁMBAR': '琥珀色',
   'ÚLTIMOS EVENTOS': '最近事件',
   '… y {0} más': '… 以及另外 {0} 项',
+  'Idioma del sistema': '系统语言',
+  'La app habla ruso.': '应用支持俄语。',
+  'Si no eliges un idioma, la app usa el del dispositivo (español, inglés, chino o ruso). Nueva opción «Idioma del sistema» en Ajustes.': '如果你未选择语言，应用将使用设备语言（西班牙语、英语、中文或俄语）。设置中新增“系统语言”选项。',
 };
