@@ -12,6 +12,7 @@ import 'markdown_view.dart';
 import 'pdf_view.dart';
 import 'video_view.dart';
 import '../l10n/l10n.dart';
+import '../services/safe_edit.dart';
 
 class EditorTab extends StatefulWidget {
   const EditorTab({super.key});
@@ -22,17 +23,21 @@ class EditorTab extends StatefulWidget {
 
 class _EditorTabState extends State<EditorTab> {
   CodeLineEditingController? _controller;
+  CodeFindController? _find;
   String? _currentFilePath;
 
   @override
   void dispose() {
+    _find?.dispose();
     _controller?.dispose();
     super.dispose();
   }
 
   void _initController(String text, String filePath) {
+    _find?.dispose();
     _controller?.dispose();
     _controller = CodeLineEditingController.fromText(text);
+    _find = CodeFindController(_controller!);
     _currentFilePath = filePath;
 
     _controller!.addListener(() {
@@ -172,6 +177,15 @@ class _EditorTabState extends State<EditorTab> {
                   ),
                   const SizedBox(width: 6),
                 ],
+                _ZoomButton(
+                  icon: Icons.search,
+                  onPressed: () => _find?.findMode(),
+                ),
+                _ZoomButton(
+                  icon: Icons.find_replace,
+                  onPressed: () => _find?.replaceMode(),
+                ),
+                const SizedBox(width: 4),
                 // Editor font-size controls.
                 _ZoomButton(
                   icon: Icons.remove,
@@ -191,7 +205,7 @@ class _EditorTabState extends State<EditorTab> {
                   icon: Icons.save_outlined,
                   dense: true,
                   onPressed: isFileDirty
-                      ? () => context.read<AppState>().saveCurrentFile()
+                      ? () => _safeSave(context)
                       : null,
                 ),
                 const SizedBox(width: 4),
@@ -203,6 +217,9 @@ class _EditorTabState extends State<EditorTab> {
           Expanded(
             child: CodeEditor(
               controller: _controller!,
+              findController: _find,
+              findBuilder: (context, controller, readOnly) =>
+                  _FindBar(controller: controller, readOnly: readOnly),
               padding: const EdgeInsets.symmetric(vertical: 8),
               wordWrap: false,
               // Hairline divider between the line-number gutter and the code.
@@ -254,6 +271,55 @@ class _EditorTabState extends State<EditorTab> {
         ],
       ),
     );
+  }
+
+  /// Save with guards: JSON/YAML validation (can be overridden), then an
+  /// optional diff confirmation, then the write (which makes a `.bak` when
+  /// enabled in settings).
+  Future<void> _safeSave(BuildContext context) async {
+    final state = context.read<AppState>();
+    final path = state.editingFilePath;
+    if (path == null) return;
+    final text = state.editingFileContent;
+    final invalid = validateStructured(path, text);
+    if (invalid != null) {
+      final go = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(tr('ARCHIVO NO VÁLIDO'),
+              style: AppText.label(12, color: AppColors.danger, spacing: 1.5)),
+          content: Text(invalid, style: AppText.mono(11, color: AppColors.bone)),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(tr('CORREGIR'),
+                    style: AppText.mono(10, color: AppColors.bone))),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text(tr('GUARDAR IGUALMENTE'),
+                    style: AppText.mono(10, color: AppColors.danger))),
+          ],
+        ),
+      );
+      if (go != true || !context.mounted) return;
+    }
+    if (state.editorConfirmDiff) {
+      final diff = lineDiff(state.editingFileBaseline, text);
+      final go = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => _DiffDialog(diff: diff, backup: state.editorBackupOnSave),
+      );
+      if (go != true || !context.mounted) return;
+    }
+    final ok = await state.saveCurrentFile();
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(ok
+          ? (state.editorBackupOnSave
+              ? tr('Guardado (copia en {0}.bak)', [path.split('/').last])
+              : tr('Guardado'))
+          : tr('No se pudo guardar el archivo')),
+    ));
   }
 
   /// Formatted markdown preview with a zoom (+/-) control and an "Editar"
@@ -593,7 +659,7 @@ class _EditorTabState extends State<EditorTab> {
                   icon: Icons.save_outlined,
                   dense: true,
                   onPressed:
-                      isFileDirty ? () => state.saveCurrentFile() : null,
+                      isFileDirty ? () => _safeSave(context) : null,
                 ),
                 const SizedBox(width: 6),
                 InvertedButton(
@@ -691,6 +757,160 @@ class _ZoomButton extends StatelessWidget {
         child: Icon(icon,
             size: 16, color: enabled ? AppColors.bone : AppColors.faint),
       ),
+    );
+  }
+}
+
+/// Compact search/replace bar for the CodeEditor.
+class _FindBar extends StatelessWidget implements PreferredSizeWidget {
+  final CodeFindController controller;
+  final bool readOnly;
+  const _FindBar({required this.controller, required this.readOnly});
+
+  @override
+  Size get preferredSize => Size.fromHeight(
+      controller.value == null ? 0 : (controller.value!.replaceMode ? 88 : 44));
+
+  @override
+  Widget build(BuildContext context) {
+    final v = controller.value;
+    if (v == null) return const SizedBox.shrink();
+    final result = v.result;
+    final count = result == null
+        ? ''
+        : (result.matches.isEmpty
+            ? '0/0'
+            : '${result.index + 1}/${result.matches.length}');
+    Widget field(TextEditingController c, String hint) => Expanded(
+          child: TextField(
+            controller: c,
+            style: AppText.mono(12, color: AppColors.bone),
+            decoration: InputDecoration(
+              isDense: true,
+              hintText: hint,
+              border: InputBorder.none,
+            ),
+          ),
+        );
+    Widget btn(IconData i, VoidCallback? f, {String? tip, bool on = false}) =>
+        IconButton(
+          visualDensity: VisualDensity.compact,
+          iconSize: 16,
+          tooltip: tip,
+          color: on ? AppColors.accent : AppColors.muted,
+          icon: Icon(i),
+          onPressed: f,
+        );
+    return Container(
+      color: AppColors.panel,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Column(children: [
+        SizedBox(
+          height: 44,
+          child: Row(children: [
+            field(controller.findInputController, tr('Buscar')),
+            Text(count, style: AppText.mono(10, color: AppColors.muted)),
+            btn(Icons.text_fields, controller.toggleCaseSensitive,
+                tip: tr('Distinguir mayúsculas'),
+                on: v.option.caseSensitive),
+            btn(Icons.code, controller.toggleRegex,
+                tip: tr('Expresión regular'), on: v.option.regex),
+            btn(Icons.keyboard_arrow_up, controller.previousMatch),
+            btn(Icons.keyboard_arrow_down, controller.nextMatch),
+            btn(Icons.close, controller.close),
+          ]),
+        ),
+        if (v.replaceMode && !readOnly)
+          SizedBox(
+            height: 44,
+            child: Row(children: [
+              field(controller.replaceInputController, tr('Reemplazar por')),
+              TextButton(
+                  onPressed: controller.replaceMatch,
+                  child: Text(tr('REEMPLAZAR'),
+                      style: AppText.mono(9, color: AppColors.bone))),
+              TextButton(
+                  onPressed: controller.replaceAllMatches,
+                  child: Text(tr('TODO'),
+                      style: AppText.mono(9, color: AppColors.bone))),
+            ]),
+          ),
+      ]),
+    );
+  }
+}
+
+/// Shows what will change before writing; changed lines with 2 lines of
+/// context, capped so huge rewrites stay responsive.
+class _DiffDialog extends StatelessWidget {
+  final List<DiffLine> diff;
+  final bool backup;
+  const _DiffDialog({required this.diff, required this.backup});
+
+  @override
+  Widget build(BuildContext context) {
+    final added = diff.where((d) => d.op == DiffOp.add).length;
+    final removed = diff.where((d) => d.op == DiffOp.remove).length;
+    final lines = compactDiff(diff);
+    const cap = 600;
+    final shown = lines.take(cap).toList();
+    return AlertDialog(
+      title: Text(tr('REVISAR CAMBIOS'),
+          style: AppText.label(12, color: AppColors.bone, spacing: 1.5)),
+      content: SizedBox(
+        width: 520,
+        height: 380,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(tr('+{0} / −{1} líneas', [added, removed]),
+                style: AppText.mono(11, color: AppColors.muted)),
+            if (backup)
+              Text(tr('Se guardará una copia .bak del original.'),
+                  style: AppText.body(11, color: AppColors.muted)),
+            const SizedBox(height: 6),
+            Expanded(
+              child: added + removed == 0
+                  ? Center(
+                      child: Text(tr('Sin cambios'),
+                          style: AppText.mono(11, color: AppColors.muted)))
+                  : ListView.builder(
+                      itemCount: shown.length + (lines.length > cap ? 1 : 0),
+                      itemBuilder: (_, i) {
+                        if (i >= shown.length) {
+                          return Text(tr('… {0} líneas más', [lines.length - cap]),
+                              style: AppText.mono(10, color: AppColors.muted));
+                        }
+                        final d = shown[i];
+                        if (d == null) {
+                          return Text('⋯',
+                              style: AppText.mono(10, color: AppColors.faint));
+                        }
+                        final color = switch (d.op) {
+                          DiffOp.add => AppColors.gitAdded,
+                          DiffOp.remove => AppColors.gitDeleted,
+                          DiffOp.same => AppColors.muted,
+                        };
+                        return Text(d.toString(),
+                            softWrap: false,
+                            overflow: TextOverflow.fade,
+                            style: AppText.mono(11, color: color));
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(tr('CANCELAR'),
+                style: AppText.mono(10, color: AppColors.muted))),
+        TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(tr('GUARDAR'),
+                style: AppText.mono(10, color: AppColors.bone))),
+      ],
     );
   }
 }
