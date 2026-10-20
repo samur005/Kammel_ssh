@@ -22,6 +22,11 @@ import '../models/terminal_shortcut.dart';
 import '../models/terminal_key_layer.dart';
 import '../models/touch_pad.dart';
 import '../widgets/joystick_recognizer.dart';
+import '../services/server_metrics.dart';
+import '../services/key_unlock.dart';
+import '../services/reconnect_policy.dart';
+import '../services/file_perms.dart';
+import '../services/terminal_highlighter.dart';
 import '../services/file_error.dart';
 import '../theme/app_theme.dart';
 import '../models/agent_activity.dart';
@@ -188,6 +193,12 @@ class TerminalSession {
   // True while a reconnect attempt is in flight, so the banner button and the
   // on-resume sweep can't double-connect the same session.
   bool reconnecting = false;
+  // Auto-reconnect bookkeeping (see AppState._scheduleAutoReconnect).
+  Timer? autoReconnectTimer;
+
+  /// Lazily created when output highlighting is on.
+  TerminalHighlighter? highlighter;
+  int autoReconnectAttempt = 0;
   // Why the last connection attempt failed (or why the live connection
   // dropped), classified for the UI. Cleared as soon as a connection succeeds,
   // so a banner can never show a stale reason. See [ConnectionError].
@@ -401,6 +412,10 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   String? _editingFilePath;
   String? get editingFilePath => _editingFilePath;
   String _editingFileContent = '';
+
+  /// Content as last loaded/saved — the "before" side of the save diff.
+  String _editingFileBaseline = '';
+  String get editingFileBaseline => _editingFileBaseline;
   String get editingFileContent => _editingFileContent;
   bool _isFileDirty = false;
   bool get isFileDirty => _isFileDirty;
@@ -1539,6 +1554,10 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Entry point wired to every remote-output batch (see [_TerminalWriter]).
   void _onTerminalOutput(TerminalSession session) {
+    if (_terminalHighlight) {
+      (session.highlighter ??= TerminalHighlighter(session.terminal))
+          .onOutput(_highlightCategories);
+    }
     if (!_watchEnabled) return;
     if (_sessionCheckTimers.containsKey(session.id)) return;
     _sessionCheckTimers[session.id] = Timer(_agentCheckThrottle, () {
@@ -1763,6 +1782,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
+    _loadConnectionTuning(prefs);
 
     final modeIndex = prefs.getInt(_kThemeMode);
     if (modeIndex != null &&
@@ -1811,9 +1831,24 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
     final scheme = prefs.getString(_kTerminalScheme);
     if (scheme != null &&
-        (scheme == 'auto' || AppTerminalTheme.schemes.containsKey(scheme))) {
+        (scheme == 'auto' ||
+            scheme == 'custom' ||
+            AppTerminalTheme.schemes.containsKey(scheme))) {
       _terminalScheme = scheme;
     }
+
+    final palette = AppTerminalTheme.decodePalette(
+        prefs.getStringList(_kTerminalCustomPalette));
+    if (palette != null) {
+      AppTerminalTheme.customTheme = AppTerminalTheme.fromPalette(palette);
+    }
+    _terminalLineHeight = (prefs.getDouble(_kTerminalLineHeight) ?? 1.3)
+        .clamp(minTerminalLineHeight, maxTerminalLineHeight);
+    _terminalHighlight = prefs.getBool(_kTerminalHighlight) ?? false;
+    _highlightCategories = decodeHighlightCategories(
+        prefs.getStringList(_kHighlightCategories));
+    _editorBackupOnSave = prefs.getBool(_kEditorBackup) ?? true;
+    _editorConfirmDiff = prefs.getBool(_kEditorConfirmDiff) ?? true;
 
     final iconScaleIdx = prefs.getInt(_kIconScale);
     if (iconScaleIdx != null &&
@@ -2415,6 +2450,78 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     await prefs.setString(_kPadSlots, _terminalPadConfig.encode());
   }
 
+  static const _kTerminalCustomPalette = 'settings_terminal_custom_palette';
+  static const _kTerminalLineHeight = 'settings_terminal_line_height';
+  static const _kTerminalHighlight = 'settings_terminal_highlight';
+  static const _kEditorBackup = 'settings_editor_backup_on_save';
+  static const _kEditorConfirmDiff = 'settings_editor_confirm_diff';
+
+  static const double minTerminalLineHeight = 1.0;
+  static const double maxTerminalLineHeight = 1.8;
+  double _terminalLineHeight = 1.3;
+  double get terminalLineHeight => _terminalLineHeight;
+
+  Future<void> setTerminalLineHeight(double v) async {
+    _terminalLineHeight =
+        v.clamp(minTerminalLineHeight, maxTerminalLineHeight);
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_kTerminalLineHeight, _terminalLineHeight);
+  }
+
+  /// Replaces the custom palette (18 colors, AppTerminalTheme.paletteKeys).
+  Future<void> setCustomTerminalPalette(List<Color> colors) async {
+    AppTerminalTheme.customTheme = AppTerminalTheme.fromPalette(colors);
+    _terminalScheme = 'custom';
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(
+        _kTerminalCustomPalette, AppTerminalTheme.encodePalette(colors));
+    await prefs.setString(_kTerminalScheme, 'custom');
+  }
+
+  /// Rule-based highlighting of terminal output (see TerminalHighlighter).
+  bool _terminalHighlight = false;
+  bool get terminalHighlight => _terminalHighlight;
+  static const _kHighlightCategories = 'settings_terminal_highlight_categories';
+  Set<HighlightCategory> _highlightCategories = {...kDefaultHighlightCategories};
+  Set<HighlightCategory> get highlightCategories => _highlightCategories;
+  Future<void> toggleHighlightCategory(HighlightCategory c) async {
+    _highlightCategories = {..._highlightCategories};
+    if (!_highlightCategories.remove(c)) _highlightCategories.add(c);
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(
+        _kHighlightCategories, encodeHighlightCategories(_highlightCategories));
+  }
+
+  Future<void> setTerminalHighlight(bool v) async {
+    _terminalHighlight = v;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kTerminalHighlight, v);
+  }
+
+  /// Editor safety: `.bak` of the remote original before overwriting, and a
+  /// diff confirmation before saving.
+  bool _editorBackupOnSave = true;
+  bool get editorBackupOnSave => _editorBackupOnSave;
+  bool _editorConfirmDiff = true;
+  bool get editorConfirmDiff => _editorConfirmDiff;
+  Future<void> setEditorBackupOnSave(bool v) async {
+    _editorBackupOnSave = v;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kEditorBackup, v);
+  }
+
+  Future<void> setEditorConfirmDiff(bool v) async {
+    _editorConfirmDiff = v;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kEditorConfirmDiff, v);
+  }
+
   Future<void> setTerminalScheme(String id) async {
     if (_terminalScheme == id) return;
     _terminalScheme = id;
@@ -2515,6 +2622,76 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   // Restored sessions come back **disconnected**, with the "Reconectar" banner
   // ready. Reconnecting on launch by itself would open SSH connections (and
   // burn mobile data) without anyone asking for them.
+
+  // ---- Connection tuning: keepalive, timeouts, auto-reconnect --------------
+
+  static const _kKeepAlive = 'settings_ssh_keepalive_seconds';
+  static const _kConnectTimeout = 'settings_ssh_connect_timeout_seconds';
+  static const _kAutoReconnect = 'settings_auto_reconnect';
+  static const _kReconnectAttempts = 'settings_auto_reconnect_attempts';
+
+  ConnectionTuning _tuning = const ConnectionTuning();
+  ConnectionTuning get connectionTuning => _tuning;
+
+  /// Asks for a private key passphrase. Set by the UI in `main.dart`; null
+  /// means no prompt is possible and an encrypted key is skipped.
+  Future<({String value, bool remember})?> Function(String profileName,
+      {required bool retry})? passphrasePrompt;
+
+  Future<void> setConnectionTuning(ConnectionTuning t) async {
+    _tuning = t;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_kKeepAlive, t.keepAliveSeconds);
+    await prefs.setInt(_kConnectTimeout, t.connectTimeoutSeconds);
+    await prefs.setBool(_kAutoReconnect, t.autoReconnect);
+    await prefs.setInt(_kReconnectAttempts, t.maxReconnectAttempts);
+  }
+
+  void _loadConnectionTuning(SharedPreferences prefs) {
+    const d = ConnectionTuning();
+    _tuning = ConnectionTuning(
+      keepAliveSeconds: prefs.getInt(_kKeepAlive) ?? d.keepAliveSeconds,
+      connectTimeoutSeconds:
+          (prefs.getInt(_kConnectTimeout) ?? d.connectTimeoutSeconds)
+              .clamp(3, 120),
+      autoReconnect: prefs.getBool(_kAutoReconnect) ?? d.autoReconnect,
+      maxReconnectAttempts:
+          (prefs.getInt(_kReconnectAttempts) ?? d.maxReconnectAttempts)
+              .clamp(1, 50),
+    );
+  }
+
+  /// After an unexpected drop: retry with exponential backoff + jitter, up to
+  /// [ConnectionTuning.maxReconnectAttempts]. Never runs for a session the
+  /// user closed or disconnected on purpose (those never reach here).
+  void _scheduleAutoReconnect(TerminalSession session) {
+    if (!_tuning.autoReconnect || session.activeProfile == null) return;
+    session.autoReconnectTimer?.cancel();
+    if (session.autoReconnectAttempt >= _tuning.maxReconnectAttempts) {
+      session.terminal.write('\r\n${tr('Reconexión automática agotada tras {0} intentos.', [session.autoReconnectAttempt])}\r\n');
+      session.autoReconnectAttempt = 0;
+      return;
+    }
+    final delay = reconnectDelay(session.autoReconnectAttempt);
+    session.autoReconnectAttempt++;
+    session.terminal.write('\r\n${tr('Reconectando en {0} s (intento {1}/{2})…', [
+          (delay.inMilliseconds / 1000).toStringAsFixed(1),
+          session.autoReconnectAttempt,
+          _tuning.maxReconnectAttempts
+        ])}\r\n');
+    session.autoReconnectTimer = Timer(delay, () async {
+      if (!_sessions.contains(session)) return;
+      if (session.connectionStatus != ConnectionStatus.disconnected) return;
+      await reconnectSession(session);
+      if (!_sessions.contains(session)) return;
+      if (session.connectionStatus == ConnectionStatus.disconnected) {
+        _scheduleAutoReconnect(session);
+      } else {
+        session.autoReconnectAttempt = 0;
+      }
+    });
+  }
 
   static const String _kOpenSessions = 'open_sessions';
   static const String _kRestoreSessions = 'settings_restore_sessions';
@@ -3023,14 +3200,35 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   // listens to it directly (ListenableBuilder) so its refreshes don't trigger
   // app-wide rebuilds.
   ServerController? _server;
-  ServerController get server =>
-      _server ??= ServerController(openClient: openClient);
+  ServerController get server => _server ??=
+      ServerController(openClient: openClient)
+        ..onThresholdBreach = _onMonitorBreach;
+
+  void _onMonitorBreach(String server, List<ThresholdBreach> breaches) {
+    for (final b in breaches) {
+      final label = switch (b.kind) {
+        MetricKind.cpu => tr('CPU'),
+        MetricKind.ram => tr('RAM'),
+        MetricKind.disk => tr('Disco'),
+        MetricKind.swap => tr('Swap'),
+        MetricKind.inode => tr('Inodos'),
+      };
+      NotificationService.showAlert(
+        sessionId: 'monitor-$server-${b.kind.name}',
+        title: tr('Umbral superado en {0}', [server]),
+        body: tr('{0}: {1}% (límite {2}%)',
+            [label, (b.value * 100).toStringAsFixed(0), b.limit]),
+        kind: 'bell',
+        sessionName: server,
+      );
+    }
+  }
 
   /// How long a single hop gets: the TCP connect to the first machine, and
   /// each `direct-tcpip` forward opened through the previous one. Per hop
   /// rather than for the whole chain, so a three-hop chain over a slow link
   /// isn't cut off halfway by a budget sized for one.
-  static const Duration _kHopTimeout = Duration(seconds: 15);
+  Duration get _kHopTimeout => _tuning.connectTimeout;
 
   /// Opens and authenticates a standalone [SSHClient] for [profile], without
   /// tying it to a terminal session. Non-fatal notices (missing device key,
@@ -3152,12 +3350,24 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     final profilePem = profile.privateKey;
     if (profilePem != null && profilePem.trim().isNotEmpty) {
       try {
-        // An encrypted PEM uses the profile password as its passphrase.
-        identities.addAll(SSHKeyPair.fromPem(
-            profilePem,
-            (profile.password?.isNotEmpty ?? false)
-                ? profile.password
-                : null));
+        // Encrypted keys: a remembered passphrase first, then the profile
+        // password (how older versions unlocked them), then ask.
+        final prompt = passphrasePrompt;
+        identities.addAll(await unlockPrivateKey(
+          profilePem,
+          candidates: [
+            await SecureStore.instance.readPassphrase(profile.id),
+            profile.password,
+          ],
+          ask: prompt == null
+              ? null
+              : ({required retry}) => prompt(profile.name, retry: retry),
+          remember: (p) => SecureStore.instance.writePassphrase(profile.id, p),
+        ));
+      } on KeyLockedError catch (e) {
+        onNotice?.call(e.cancelled
+            ? tr('Llave privada bloqueada: no se introdujo la frase de paso.')
+            : tr('Frase de paso incorrecta para la llave privada.'));
       } catch (e) {
         onNotice?.call(tr('No se pudo leer la llave privada del perfil: {0}', [e]));
       }
@@ -3168,6 +3378,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       username: profile.username,
       identities: identities.isEmpty ? null : identities,
       onPasswordRequest: () => profile.password ?? '',
+      keepAliveInterval: _tuning.keepAlive,
       // Host key pinning, per hop: each machine of the chain is checked and
       // pinned under its own host:port. Without this dartssh2 accepts any key,
       // so anyone able to intercept the connection could impersonate the server
@@ -3354,6 +3565,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       _seedCwdReporting(session);
 
       session.connectionStatus = ConnectionStatus.remote;
+      session.autoReconnectAttempt = 0;
       session.started = true;
       session.lastError = null;
       // A fresh shell is at its prompt. The watch loop takes over from here and
@@ -3408,6 +3620,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
               body: tr('Se cerró la conexión con {0}.', [session.name]),
               kind: AlertKind.disconnect);
           notifyListeners();
+          _scheduleAutoReconnect(session);
         }
       }).catchError((e) {
         if (session.connectionStatus == ConnectionStatus.remote) {
@@ -3421,6 +3634,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
               body: tr('Se perdió la conexión con {0}.', [session.name]),
               kind: AlertKind.disconnect);
           notifyListeners();
+          _scheduleAutoReconnect(session);
         }
       });
 
@@ -3499,6 +3713,9 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
   // Close an open session
   void closeSession(int index) {
+    if (index >= 0 && index < _sessions.length) {
+      _sessions[index].autoReconnectTimer?.cancel();
+    }
     if (index < 0 || index >= _sessions.length) return;
     final session = _sessions[index];
     _cleanupSession(session);
@@ -4420,6 +4637,29 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// Rename [entry] to [newName], keeping it in the same directory.
+  /// chmod over SFTP (remote sessions only). [mode] holds permission bits.
+  Future<FileOpResult> chmodEntry(FileSystemEntityInfo entry, int mode) async {
+    final session = activeSession;
+    if (session == null ||
+        session.connectionStatus != ConnectionStatus.remote) {
+      return FileOpResult.ok('');
+    }
+    try {
+      final sftp = await _getSftpClient(session);
+      // Keep the file-type bits, replace the permission bits.
+      final typeBits = (entry.mode ?? 0) & ~0xFFF;
+      await sftp.setStat(entry.path,
+          SftpFileAttrs(mode: SftpFileMode.value(typeBits | (mode & 0xFFF))));
+      return FileOpResult.ok(
+          tr('Permisos de "{0}" cambiados a {1}', [entry.name, formatOctal(mode)]));
+    } catch (e) {
+      session.sftpClient = null;
+      return FileOpResult.failed(tr('No se pudieron cambiar los permisos'), e);
+    } finally {
+      await _loadFiles();
+    }
+  }
+
   Future<FileOpResult> renameEntry(
       FileSystemEntityInfo entry, String newName) async {
     final session = activeSession;
@@ -5103,12 +5343,17 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
           if (item.filename == '.' || item.filename == '..') continue;
 
           final isDir = item.attr.isDirectory;
+          final og = ownerFromLongname(item.longname,
+              uid: item.attr.userID, gid: item.attr.groupID);
           loaded.add(FileSystemEntityInfo(
             name: item.filename,
             path: '${session.currentPath}/${item.filename}'.replaceAll('//', '/'),
             isDirectory: isDir,
             size: item.attr.size ?? 0,
             modified: DateTime.fromMillisecondsSinceEpoch((item.attr.modifyTime ?? 0) * 1000),
+            mode: item.attr.mode?.value,
+            owner: og?.$1,
+            group: og?.$2,
           ));
         }
       } else {
@@ -5267,6 +5512,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
         _viewingImageBytes = null;
         _viewingMediaPath = null;
         _editingFileContent = content;
+        _editingFileBaseline = content;
         // Markdown and SVG files open in their formatted preview by default;
         // everything else goes straight to the raw code editor.
         _isPreviewMode = isMarkdownPath(file.path) || isSvgPath(file.path);
@@ -5303,9 +5549,12 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  Future<void> saveCurrentFile() async {
-    if (_editingFilePath == null) return;
-    
+  /// Saves the open file. When [editorBackupOnSave] is on, the current file
+  /// on disk is first copied to `<name>.bak`. Returns whether it was written.
+  Future<bool> saveCurrentFile() async {
+    if (_editingFilePath == null) return false;
+    var ok = false;
+
     final session = activeSession;
     if (session != null) {
       session.isLoadingFiles = true;
@@ -5321,6 +5570,23 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
           orElse: () => session ?? activeSession!,
         );
         final sftp = await _getSftpClient(editSession);
+        if (_editorBackupOnSave) {
+          try {
+            final orig = await sftp.open(_editingFilePath!,
+                mode: SftpFileOpenMode.read);
+            final old = await orig.readBytes().timeout(const Duration(seconds: 15));
+            await orig.close();
+            final bak = await sftp.open('${_editingFilePath!}.bak',
+                mode: SftpFileOpenMode.write |
+                    SftpFileOpenMode.create |
+                    SftpFileOpenMode.truncate);
+            await bak.write(Stream.value(old)).timeout(const Duration(seconds: 15));
+            await bak.close();
+          } on SftpStatusError catch (e) {
+            // No original yet (new file) is fine; anything else aborts.
+            if (e.code != SftpStatusCode.noSuchFile) rethrow;
+          }
+        }
         fileStream = await sftp.open(
           _editingFilePath!,
           mode: SftpFileOpenMode.write | SftpFileOpenMode.create | SftpFileOpenMode.truncate,
@@ -5328,9 +5594,14 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
         await fileStream.write(Stream.value(bytes)).timeout(const Duration(seconds: 15));
       } else {
         final localFile = File(_editingFilePath!);
+        if (_editorBackupOnSave && await localFile.exists()) {
+          await localFile.copy('${_editingFilePath!}.bak');
+        }
         await localFile.writeAsBytes(bytes);
       }
       _isFileDirty = false;
+      _editingFileBaseline = _editingFileContent;
+      ok = true;
       if (session != null) {
         session.terminal.write('Archivo guardado: ${_editingFilePath!.split("/").last}\r\n');
       }
@@ -5355,6 +5626,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
         notifyListeners();
       }
     }
+    return ok;
   }
 
   void closeFile() {
@@ -5706,11 +5978,21 @@ class FileSystemEntityInfo {
   final int size;
   final DateTime modified;
 
+  /// Unix permission bits (remote SFTP only; null when unknown).
+  final int? mode;
+
+  /// Owner / group names (or numeric ids) for remote entries.
+  final String? owner;
+  final String? group;
+
   FileSystemEntityInfo({
     required this.name,
     required this.path,
     required this.isDirectory,
     required this.size,
     required this.modified,
+    this.mode,
+    this.owner,
+    this.group,
   });
 }

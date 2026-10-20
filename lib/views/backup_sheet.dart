@@ -7,7 +7,9 @@ import '../providers/app_state.dart';
 import '../services/backup_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/adaptive_sheet.dart';
+import '../widgets/secret_prompt_dialog.dart';
 import '../widgets/swiss.dart';
+import 'webdav_sync_sheet.dart';
 
 /// Export / restore of the whole configuration.
 ///
@@ -34,18 +36,29 @@ class _BackupSheet extends StatefulWidget {
 
 class _BackupSheetState extends State<_BackupSheet> {
   bool _includeSecrets = false;
+  bool _encrypt = true;
   bool _busy = false;
   String? _result;
   bool _resultIsError = false;
 
   Future<void> _export() async {
+    String? password;
+    if (_encrypt) {
+      final r = await showSecretPrompt(context,
+          title: tr('CIFRAR COPIA'),
+          message: tr('Elige una contraseña para la copia. Sin ella no se puede recuperar: KAMMEL no la guarda.'),
+          confirm: true);
+      if (r == null || !mounted) return;
+      password = r.value;
+    }
     setState(() {
       _busy = true;
       _result = null;
     });
     try {
       final envelope = await BackupService.build(includeSecrets: _includeSecrets);
-      final file = await BackupService.writeToDisk(envelope);
+      final file =
+          await BackupService.writeToDisk(envelope, password: password);
       if (!mounted) return;
       setState(() {
         _busy = false;
@@ -90,7 +103,12 @@ class _BackupSheetState extends State<_BackupSheet> {
       _busy = true;
       _result = null;
     });
-    final outcome = await BackupService.pickAndRestore();
+    final outcome = await BackupService.pickAndRestore(askPassword: () async {
+      final r = await showSecretPrompt(context,
+          title: tr('COPIA CIFRADA'),
+          message: tr('Introduce la contraseña con la que se cifró la copia.'));
+      return r?.value;
+    });
     if (!mounted) return;
 
     if (outcome.error != null) {
@@ -140,8 +158,17 @@ class _BackupSheetState extends State<_BackupSheet> {
               const SizedBox(height: 16),
               Hairline(),
               ToggleRow(
+                label: tr('CIFRAR CON CONTRASEÑA'),
+                description: tr('Argon2id + XChaCha20-Poly1305. Sin la contraseña nadie puede leer la copia, tampoco tú.'),
+                value: _encrypt,
+                onChanged: (v) => setState(() => _encrypt = v),
+              ),
+              Hairline(),
+              ToggleRow(
                 label: tr('INCLUIR CONTRASEÑAS Y LLAVES'),
-                description: tr(
+                description: _encrypt
+                    ? tr('Las credenciales viajan dentro de la copia cifrada.')
+                    : tr(
                     'El archivo quedará SIN CIFRAR: cualquiera que lo abra verá tus credenciales. Actívalo sólo si vas a guardarlo en un sitio seguro.'),
                 value: _includeSecrets,
                 onChanged: (v) => setState(() => _includeSecrets = v),
@@ -159,6 +186,12 @@ class _BackupSheetState extends State<_BackupSheet> {
                 label: tr('Restaurar desde archivo'),
                 icon: Icons.download_outlined,
                 onPressed: _busy ? null : _import,
+              ),
+              const SizedBox(height: 10),
+              GhostButton(
+                label: tr('Sincronizar con WebDAV'),
+                icon: Icons.cloud_sync_outlined,
+                onPressed: _busy ? null : () => showWebDavSyncSheet(context),
               ),
               if (_busy) ...[
                 const SizedBox(height: 16),

@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart' show sha256;
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../l10n/l10n.dart';
+import 'backup_crypto.dart';
 import 'secure_store.dart';
 
 /// Everything the app knows about a user, in one file.
@@ -16,8 +18,9 @@ import 'secure_store.dart';
 /// wipe with the app, so "my phone died" and "I bought a new phone" both cost
 /// an evening.
 ///
-/// The file is plain JSON on purpose: it is meant to be readable, diffable and
-/// editable, and to survive this app being uninstalled.
+/// The file is JSON: plain (readable, diffable) when no password is given, or
+/// an Argon2id + XChaCha20-Poly1305 container from [BackupCrypto] when it is.
+/// Plain backups from older versions keep importing unchanged.
 class BackupService {
   BackupService._();
 
@@ -131,13 +134,17 @@ class BackupService {
   /// Writes the backup where the user can actually find it: the shared
   /// `Download/KAMMEL` folder on Android (same destination the SFTP downloader
   /// uses), the app documents directory elsewhere. Returns the file.
-  static Future<File> writeToDisk(Map<String, dynamic> envelope) async {
+  static Future<File> writeToDisk(Map<String, dynamic> envelope,
+      {String? password}) async {
     final stamp = DateTime.now()
         .toIso8601String()
         .replaceAll(':', '-')
         .split('.')
         .first;
-    final name = 'kammel-backup-$stamp.json';
+    final encrypted = password != null && password.isNotEmpty;
+    final name = encrypted
+        ? 'kammel-backup-$stamp.enc.json'
+        : 'kammel-backup-$stamp.json';
 
     String dir;
     if (Platform.isAndroid &&
@@ -149,10 +156,74 @@ class BackupService {
     await Directory(dir).create(recursive: true);
 
     final file = File('$dir/$name');
-    await file.writeAsString(
-        const JsonEncoder.withIndent('  ').convert(envelope));
+    await file.writeAsString(await encodeForFile(envelope, password: password));
     return file;
   }
+
+  /// Serialises [envelope]; encrypted with [password] when one is given.
+  static Future<String> encodeForFile(Map<String, dynamic> envelope,
+      {String? password}) async {
+    const pretty = JsonEncoder.withIndent('  ');
+    if (password == null || password.isEmpty) return pretty.convert(envelope);
+    final container = await BackupCrypto.encryptInBackground(
+        json.encode(envelope), password);
+    return pretty.convert(container);
+  }
+
+  /// Stable fingerprint of what a backup *contains* (prefs and secrets, not
+  /// its timestamp), so sync can tell whether anything changed.
+  static String contentHash(Map<String, dynamic> envelope) {
+    Object? canon(Object? v) {
+      if (v is Map) {
+        final keys = v.keys.map((k) => '$k').toList()..sort();
+        return {for (final k in keys) k: canon(v[k])};
+      }
+      if (v is List) return v.map(canon).toList();
+      return v;
+    }
+
+    final payload = {
+      'prefs': envelope['prefs'],
+      'secrets': envelope['secrets'],
+    };
+    return sha256.convert(utf8.encode(json.encode(canon(payload)))).toString();
+  }
+
+  /// Turns file text into a plain envelope, decrypting when needed.
+  /// [askPassword] is called only for encrypted files; returning null cancels.
+  /// Returns `(envelope, error)`; both null means the user cancelled.
+  static Future<(Map<String, dynamic>?, String?)> decodeFile(String text,
+      {required Future<String?> Function() askPassword}) async {
+    Map<String, dynamic> parsed;
+    try {
+      parsed = json.decode(text) as Map<String, dynamic>;
+    } catch (_) {
+      return (null, tr('Ese archivo no es una copia de KAMMEL.'));
+    }
+    if (!BackupCrypto.isEncrypted(parsed)) return (parsed, null);
+    final password = await askPassword();
+    if (password == null) return (null, null);
+    try {
+      final clear = await BackupCrypto.decryptInBackground(parsed, password);
+      return (json.decode(clear) as Map<String, dynamic>, null);
+    } on BackupCryptoError catch (e) {
+      return (null, describeCryptoError(e));
+    } catch (_) {
+      return (null, tr('La copia está incompleta o dañada.'));
+    }
+  }
+
+  static String describeCryptoError(BackupCryptoError e) =>
+      switch (e.failure) {
+        BackupCryptoFailure.wrongPasswordOrCorrupt =>
+          tr('Contraseña incorrecta o copia dañada.'),
+        BackupCryptoFailure.unsupportedVersion =>
+          tr('La copia cifrada usa un formato más nuevo. Actualiza KAMMEL.'),
+        BackupCryptoFailure.unsupportedAlgorithm =>
+          tr('La copia cifrada usa un algoritmo desconocido.'),
+        BackupCryptoFailure.emptyPassword => tr('La contraseña no puede estar vacía.'),
+        BackupCryptoFailure.malformed => tr('La copia está incompleta o dañada.'),
+      };
 
   // ---- Import ---------------------------------------------------------------
 
@@ -171,7 +242,8 @@ class BackupService {
   /// one, a key that isn't stays as it is. That makes "import my prompts from
   /// the old phone" safe on a device that is already set up, and it is also why
   /// the caller must reload [AppState] afterwards.
-  static Future<({int keys, int secrets, String? error})> pickAndRestore() async {
+  static Future<({int keys, int secrets, String? error})> pickAndRestore(
+      {required Future<String?> Function() askPassword}) async {
     final picked = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['json'],
@@ -192,13 +264,9 @@ class BackupService {
       return _result(0, 0, tr('No se pudo leer el archivo: {0}', [e]));
     }
 
-    Map<String, dynamic> envelope;
-    try {
-      envelope = json.decode(text) as Map<String, dynamic>;
-    } catch (_) {
-      return _result(0, 0, tr('Ese archivo no es una copia de KAMMEL.'));
-    }
-
+    final (envelope, error) =
+        await decodeFile(text, askPassword: askPassword);
+    if (envelope == null) return _result(0, 0, error);
     return restore(envelope);
   }
 

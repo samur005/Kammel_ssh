@@ -9,6 +9,7 @@ import 'services/agent_monitor.dart';
 import 'services/tunnel_manager.dart';
 import 'services/window_geometry.dart';
 import 'theme/app_theme.dart';
+import 'widgets/secret_prompt_dialog.dart';
 import 'views/home_view.dart';
 import 'views/host_key_dialog.dart';
 import 'views/lock_screen.dart';
@@ -65,6 +66,17 @@ Future<void> main() async {
     final ctx = navigatorKey.currentContext;
     if (ctx == null) return false;
     return showHostKeyDialog(ctx, challenge);
+  };
+
+  appState.passphrasePrompt = (profileName, {required retry}) async {
+    final ctx = navigatorKey.currentContext;
+    if (ctx == null) return null;
+    return showSecretPrompt(ctx,
+        title: tr('FRASE DE PASO DE LA LLAVE'),
+        message: retry
+            ? tr('Frase de paso incorrecta. Inténtalo de nuevo ({0}).', [profileName])
+            : tr('La llave privada de «{0}» está protegida con una frase de paso.', [profileName]),
+        rememberLabel: tr('Recordar en el almacén seguro del dispositivo'));
   };
 
   runApp(

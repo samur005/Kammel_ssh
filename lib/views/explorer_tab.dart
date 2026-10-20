@@ -10,6 +10,7 @@ import '../widgets/edge_dock.dart';
 import '../widgets/tap_target.dart';
 import 'folder_picker_dialog.dart';
 import '../l10n/l10n.dart';
+import '../services/file_perms.dart';
 
 class ExplorerTab extends StatefulWidget {
   const ExplorerTab({super.key});
@@ -663,6 +664,15 @@ class _ExplorerTabState extends State<ExplorerTab> {
                       visible.firstWhere((f) => f.path == selected.first);
                   _promptRename(context, entry);
                 }),
+          if (selected.length == 1 &&
+              visible.any((f) => f.path == selected.first && f.mode != null))
+            _barIcon(Icons.lock_outline,
+                tooltip: tr('Permisos (chmod)'),
+                onTap: () {
+                  final entry =
+                      visible.firstWhere((f) => f.path == selected.first);
+                  _promptChmod(context, entry);
+                }),
           _barIcon(Icons.select_all,
               tooltip: tr('Seleccionar todo'),
               onTap: () => state.selectPaths(visible.map((f) => f.path))),
@@ -1068,6 +1078,20 @@ class _ExplorerTabState extends State<ExplorerTab> {
     );
   }
 
+  Future<void> _promptChmod(
+      BuildContext context, FileSystemEntityInfo entry) async {
+    final state = context.read<AppState>();
+    final mode = await showDialog<int>(
+      context: context,
+      builder: (ctx) => _ChmodDialog(entry: entry),
+    );
+    if (mode == null) return;
+    final result = await state.chmodEntry(entry, mode);
+    if (!context.mounted) return;
+    state.clearSelection();
+    _report(context, result);
+  }
+
   Future<void> _promptRename(
       BuildContext context, FileSystemEntityInfo entry) async {
     final state = context.read<AppState>();
@@ -1223,9 +1247,13 @@ class _ExplorerTabState extends State<ExplorerTab> {
                               ? Icons.audiotrack_outlined
                               : Icons.description_outlined),
           title: item.name,
-          meta: item.isDirectory
-              ? tr('CARPETA')
-              : '${_formatBytes(item.size)} · ${_formatDate(item.modified)}',
+          meta: [
+            item.isDirectory
+                ? tr('CARPETA')
+                : '${_formatBytes(item.size)} · ${_formatDate(item.modified)}',
+            if (item.mode != null) formatMode(item.mode!),
+            if (item.owner != null) '${item.owner}:${item.group ?? ''}',
+          ].join(' · '),
           active: isSelected,
           // The folder's trailing button drops the terminal into that path.
           trailing: item.isDirectory && !selectionMode
@@ -1266,5 +1294,103 @@ class _ExplorerTabState extends State<ExplorerTab> {
 
   String _formatDate(DateTime date) {
     return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+  }
+}
+
+/// Permission editor: a 3×3 grid of r/w/x toggles kept in sync with an octal
+/// field. Pops the new mode (permission bits) or null.
+class _ChmodDialog extends StatefulWidget {
+  final FileSystemEntityInfo entry;
+  const _ChmodDialog({required this.entry});
+  @override
+  State<_ChmodDialog> createState() => _ChmodDialogState();
+}
+
+class _ChmodDialogState extends State<_ChmodDialog> {
+  late int _mode = (widget.entry.mode ?? 0x1A4) & 0xFFF;
+  late final _octal = TextEditingController(text: formatOctal(_mode));
+
+  void _toggle(int bit) {
+    setState(() {
+      _mode ^= bit;
+      _octal.text = formatOctal(_mode);
+    });
+  }
+
+  @override
+  void dispose() {
+    _octal.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final who = [tr('Propietario'), tr('Grupo'), tr('Otros')];
+    const what = ['r', 'w', 'x'];
+    return AlertDialog(
+      title: Text(tr('PERMISOS'),
+          style: AppText.label(12, color: AppColors.bone, spacing: 1.5)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(widget.entry.name,
+              style: AppText.mono(11, color: AppColors.muted),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis),
+          if (widget.entry.owner != null)
+            Text(tr('Propietario: {0}', [
+              '${widget.entry.owner}:${widget.entry.group ?? ''}'
+            ]), style: AppText.mono(10, color: AppColors.muted)),
+          const SizedBox(height: 10),
+          for (var r = 0; r < 3; r++)
+            Row(children: [
+              SizedBox(
+                  width: 96,
+                  child: Text(who[r],
+                      style: AppText.body(12, color: AppColors.bone))),
+              for (var c = 0; c < 3; c++)
+                Builder(builder: (_) {
+                  final bit = 1 << (8 - (r * 3 + c));
+                  final on = _mode & bit != 0;
+                  return Padding(
+                    padding: const EdgeInsets.all(2),
+                    child: FilterChip(
+                      label: Text(what[c], style: AppText.mono(11)),
+                      selected: on,
+                      onSelected: (_) => _toggle(bit),
+                    ),
+                  );
+                }),
+            ]),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _octal,
+            keyboardType: TextInputType.number,
+            style: AppText.mono(13, color: AppColors.bone),
+            decoration: InputDecoration(labelText: tr('Octal (p. ej. 644)')),
+            onChanged: (v) {
+              final m = parseOctalMode(v);
+              if (m != null) setState(() => _mode = m);
+            },
+          ),
+          const SizedBox(height: 4),
+          Text(formatMode(_mode),
+              style: AppText.mono(12, color: AppColors.bone)),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(tr('CANCELAR'),
+              style: AppText.mono(10, color: AppColors.muted, spacing: 1.0)),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context, _mode),
+          child: Text(tr('APLICAR'),
+              style: AppText.mono(10, color: AppColors.bone, spacing: 1.0)),
+        ),
+      ],
+    );
   }
 }

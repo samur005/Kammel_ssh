@@ -217,6 +217,31 @@ class PersonalizationTab extends StatelessWidget {
                 ),
               ),
               Hairline(),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 14, 12, 0),
+                child: Text(
+                    tr('INTERLINEADO · {0}', [
+                      context
+                          .select<AppState, double>((s) => s.terminalLineHeight)
+                          .toStringAsFixed(2)
+                    ]),
+                    style: AppText.label(9, color: AppColors.muted)),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Slider(
+                  value:
+                      context.select<AppState, double>((s) => s.terminalLineHeight),
+                  min: AppState.minTerminalLineHeight,
+                  max: AppState.maxTerminalLineHeight,
+                  divisions: 16,
+                  activeColor: AppColors.bone,
+                  inactiveColor: AppColors.hairline,
+                  thumbColor: AppColors.bone,
+                  onChanged: state.setTerminalLineHeight,
+                ),
+              ),
+              Hairline(),
               // Live preview of the chosen size.
               Container(
                 width: double.infinity,
@@ -238,6 +263,18 @@ class PersonalizationTab extends StatelessWidget {
                 child: _SchemeSelector(
                   value: terminalScheme,
                   onChanged: state.setTerminalScheme,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: GhostButton(
+                    label: tr('Editar paleta propia'),
+                    icon: Icons.palette_outlined,
+                    dense: true,
+                    onPressed: () => _showPaletteEditor(context),
+                  ),
                 ),
               ),
               Hairline(),
@@ -535,7 +572,7 @@ class _SchemeSelector extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 6),
-              Text(label,
+              Text(id == 'custom' ? tr('PROPIA') : label,
                   style: AppText.label(8,
                       color: fg,
                       weight: active ? FontWeight.w800 : FontWeight.w600,
@@ -968,6 +1005,134 @@ class _ShortcutLayoutSelector extends StatelessWidget {
           },
         ),
       ),
+    );
+  }
+}
+
+/// Edits the 18 colors of the custom terminal palette. Starts from the
+/// current custom palette; saving switches the terminal to it.
+void _showPaletteEditor(BuildContext context) {
+  showDialog<void>(context: context, builder: (_) => const _PaletteEditor());
+}
+
+class _PaletteEditor extends StatefulWidget {
+  const _PaletteEditor();
+  @override
+  State<_PaletteEditor> createState() => _PaletteEditorState();
+}
+
+class _PaletteEditorState extends State<_PaletteEditor> {
+  late List<Color> _colors =
+      AppTerminalTheme.paletteOf(AppTerminalTheme.customTheme);
+
+  String _name(String key) => switch (key) {
+        'foreground' => tr('Texto'),
+        'background' => tr('Fondo'),
+        'black' => tr('Negro'),
+        'red' => tr('Rojo'),
+        'green' => tr('Verde'),
+        'yellow' => tr('Amarillo'),
+        'blue' => tr('Azul'),
+        'magenta' => tr('Magenta'),
+        'cyan' => tr('Cian'),
+        'white' => tr('Blanco'),
+        'brightBlack' => tr('Negro brillante'),
+        'brightRed' => tr('Rojo brillante'),
+        'brightGreen' => tr('Verde brillante'),
+        'brightYellow' => tr('Amarillo brillante'),
+        'brightBlue' => tr('Azul brillante'),
+        'brightMagenta' => tr('Magenta brillante'),
+        'brightCyan' => tr('Cian brillante'),
+        _ => tr('Blanco brillante'),
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppColors.panel,
+      title: Text(tr('PALETA PROPIA'),
+          style: AppText.label(11, color: AppColors.bone, spacing: 1.4)),
+      content: SizedBox(
+        width: 360,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Text(tr('Partir de:'),
+                      style: AppText.body(11, color: AppColors.muted)),
+                  const SizedBox(width: 8),
+                  for (final id in AppTerminalTheme.schemes.keys)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: InkWell(
+                        onTap: () => setState(() => _colors =
+                            AppTerminalTheme.paletteOf(
+                                AppTerminalTheme.schemes[id]!)),
+                        child: Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: Text(id.toUpperCase(),
+                              style: AppText.mono(8, color: AppColors.bone)),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(8),
+                color: _colors[1],
+                width: double.infinity,
+                child: Wrap(spacing: 6, children: [
+                  for (var i = 2; i < _colors.length; i++)
+                    Text('■', style: TextStyle(color: _colors[i], fontSize: 16)),
+                  Text(' user@host:~\$ ls',
+                      style: AppText.mono(11, color: _colors[0])),
+                ]),
+              ),
+              const SizedBox(height: 8),
+              for (var i = 0; i < _colors.length; i++)
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Container(
+                    width: 22,
+                    height: 22,
+                    decoration: BoxDecoration(
+                        color: _colors[i],
+                        border: Border.all(color: AppColors.hairline)),
+                  ),
+                  title: Text(_name(AppTerminalTheme.paletteKeys[i]),
+                      style: AppText.body(12, color: AppColors.bone)),
+                  trailing: Text(AppTerminalTheme.encodePalette([_colors[i]]).first,
+                      style: AppText.mono(10, color: AppColors.muted)),
+                  onTap: () async {
+                    final hex = await ColorPickerDialog.show(context,
+                        initialColor: _colors[i]);
+                    final c = AppTerminalTheme.decodePalette(
+                        hex == null ? null : List.filled(18, hex));
+                    if (c != null) setState(() => _colors[i] = c.first);
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        GhostButton(
+            label: tr('Cancelar'),
+            dense: true,
+            onPressed: () => Navigator.of(context).pop()),
+        InvertedButton(
+          label: tr('Guardar'),
+          dense: true,
+          onPressed: () {
+            context.read<AppState>().setCustomTerminalPalette(_colors);
+            Navigator.of(context).pop();
+          },
+        ),
+      ],
     );
   }
 }
