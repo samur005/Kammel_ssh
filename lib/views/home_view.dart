@@ -401,13 +401,19 @@ class _TopNavItem extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 5),
-              Text(
-                spec.label,
-                style: AppText.mono(
-                  8,
-                  color: fg,
-                  weight: active ? FontWeight.w700 : FontWeight.w500,
-                  spacing: 0.8,
+              // "ПОДКЛЮЧЕНИЯ" and friends must not clip on narrow phones.
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  spec.label,
+                  maxLines: 1,
+                  softWrap: false,
+                  style: AppText.mono(
+                    8,
+                    color: fg,
+                    weight: active ? FontWeight.w700 : FontWeight.w500,
+                    spacing: 0.8,
+                  ),
                 ),
               ),
             ],

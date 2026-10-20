@@ -60,7 +60,15 @@ class ScreenHeader extends StatelessWidget {
   final String? eyebrow;
   final Widget? trailing;
   final Widget? leading;
-  const ScreenHeader(this.title, {super.key, this.eyebrow, this.trailing, this.leading});
+
+  /// Keep the eyebrow's case (brand names such as "ABSssh").
+  final bool eyebrowKeepCase;
+  const ScreenHeader(this.title,
+      {super.key,
+      this.eyebrow,
+      this.trailing,
+      this.leading,
+      this.eyebrowKeepCase = false});
 
   @override
   Widget build(BuildContext context) {
@@ -78,16 +86,24 @@ class ScreenHeader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (eyebrow != null) ...[
-                  Text(eyebrow!.toUpperCase(),
+                  Text(eyebrowKeepCase ? eyebrow! : eyebrow!.toUpperCase(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: AppText.mono(9,
                           color: AppColors.muted, spacing: 2)),
                   const SizedBox(height: 6),
                 ],
-                Text(
-                  title.toUpperCase(),
-                  style: AppText.display(46),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                // Long translations ("РАБОЧАЯ ОБЛАСТЬ", "ПЕРСОНАЛИЗАЦИЯ"…)
+                // shrink to the available width instead of being cut off.
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Text(
+                    title.toUpperCase(),
+                    style: AppText.display(46),
+                    maxLines: 1,
+                    softWrap: false,
+                  ),
                 ),
               ],
             ),
