@@ -537,7 +537,7 @@ class _TerminalTabState extends State<TerminalTab> with WidgetsBindingObserver {
                         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
                         textStyle: TerminalStyle(
                           fontSize: state.terminalFontSize,
-                          height: 1.3,
+                          height: state.terminalLineHeight,
                           fontFamily: state.monoFontFamily,
                           fontFamilyFallback: const ['monospace'],
                         ),

@@ -25,6 +25,7 @@ import '../widgets/joystick_recognizer.dart';
 import '../services/server_metrics.dart';
 import '../services/key_unlock.dart';
 import '../services/reconnect_policy.dart';
+import '../services/file_perms.dart';
 import '../services/file_error.dart';
 import '../theme/app_theme.dart';
 import '../models/agent_activity.dart';
@@ -1818,9 +1819,22 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
     final scheme = prefs.getString(_kTerminalScheme);
     if (scheme != null &&
-        (scheme == 'auto' || AppTerminalTheme.schemes.containsKey(scheme))) {
+        (scheme == 'auto' ||
+            scheme == 'custom' ||
+            AppTerminalTheme.schemes.containsKey(scheme))) {
       _terminalScheme = scheme;
     }
+
+    final palette = AppTerminalTheme.decodePalette(
+        prefs.getStringList(_kTerminalCustomPalette));
+    if (palette != null) {
+      AppTerminalTheme.customTheme = AppTerminalTheme.fromPalette(palette);
+    }
+    _terminalLineHeight = (prefs.getDouble(_kTerminalLineHeight) ?? 1.3)
+        .clamp(minTerminalLineHeight, maxTerminalLineHeight);
+    _terminalHighlight = prefs.getBool(_kTerminalHighlight) ?? false;
+    _editorBackupOnSave = prefs.getBool(_kEditorBackup) ?? true;
+    _editorConfirmDiff = prefs.getBool(_kEditorConfirmDiff) ?? true;
 
     final iconScaleIdx = prefs.getInt(_kIconScale);
     if (iconScaleIdx != null &&
@@ -2420,6 +2434,66 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kPadSlots, _terminalPadConfig.encode());
+  }
+
+  static const _kTerminalCustomPalette = 'settings_terminal_custom_palette';
+  static const _kTerminalLineHeight = 'settings_terminal_line_height';
+  static const _kTerminalHighlight = 'settings_terminal_highlight';
+  static const _kEditorBackup = 'settings_editor_backup_on_save';
+  static const _kEditorConfirmDiff = 'settings_editor_confirm_diff';
+
+  static const double minTerminalLineHeight = 1.0;
+  static const double maxTerminalLineHeight = 1.8;
+  double _terminalLineHeight = 1.3;
+  double get terminalLineHeight => _terminalLineHeight;
+
+  Future<void> setTerminalLineHeight(double v) async {
+    _terminalLineHeight =
+        v.clamp(minTerminalLineHeight, maxTerminalLineHeight);
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_kTerminalLineHeight, _terminalLineHeight);
+  }
+
+  /// Replaces the custom palette (18 colors, AppTerminalTheme.paletteKeys).
+  Future<void> setCustomTerminalPalette(List<Color> colors) async {
+    AppTerminalTheme.customTheme = AppTerminalTheme.fromPalette(colors);
+    _terminalScheme = 'custom';
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(
+        _kTerminalCustomPalette, AppTerminalTheme.encodePalette(colors));
+    await prefs.setString(_kTerminalScheme, 'custom');
+  }
+
+  /// Rule-based highlighting of terminal output (see TerminalHighlighter).
+  bool _terminalHighlight = false;
+  bool get terminalHighlight => _terminalHighlight;
+  Future<void> setTerminalHighlight(bool v) async {
+    _terminalHighlight = v;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kTerminalHighlight, v);
+  }
+
+  /// Editor safety: `.bak` of the remote original before overwriting, and a
+  /// diff confirmation before saving.
+  bool _editorBackupOnSave = true;
+  bool get editorBackupOnSave => _editorBackupOnSave;
+  bool _editorConfirmDiff = true;
+  bool get editorConfirmDiff => _editorConfirmDiff;
+  Future<void> setEditorBackupOnSave(bool v) async {
+    _editorBackupOnSave = v;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kEditorBackup, v);
+  }
+
+  Future<void> setEditorConfirmDiff(bool v) async {
+    _editorConfirmDiff = v;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kEditorConfirmDiff, v);
   }
 
   Future<void> setTerminalScheme(String id) async {
@@ -4537,6 +4611,29 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// Rename [entry] to [newName], keeping it in the same directory.
+  /// chmod over SFTP (remote sessions only). [mode] holds permission bits.
+  Future<FileOpResult> chmodEntry(FileSystemEntityInfo entry, int mode) async {
+    final session = activeSession;
+    if (session == null ||
+        session.connectionStatus != ConnectionStatus.remote) {
+      return FileOpResult.ok('');
+    }
+    try {
+      final sftp = await _getSftpClient(session);
+      // Keep the file-type bits, replace the permission bits.
+      final typeBits = (entry.mode ?? 0) & ~0xFFF;
+      await sftp.setStat(entry.path,
+          SftpFileAttrs(mode: SftpFileMode.value(typeBits | (mode & 0xFFF))));
+      return FileOpResult.ok(
+          tr('Permisos de "{0}" cambiados a {1}', [entry.name, formatOctal(mode)]));
+    } catch (e) {
+      session.sftpClient = null;
+      return FileOpResult.failed(tr('No se pudieron cambiar los permisos'), e);
+    } finally {
+      await _loadFiles();
+    }
+  }
+
   Future<FileOpResult> renameEntry(
       FileSystemEntityInfo entry, String newName) async {
     final session = activeSession;
@@ -5220,12 +5317,17 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
           if (item.filename == '.' || item.filename == '..') continue;
 
           final isDir = item.attr.isDirectory;
+          final og = ownerFromLongname(item.longname,
+              uid: item.attr.userID, gid: item.attr.groupID);
           loaded.add(FileSystemEntityInfo(
             name: item.filename,
             path: '${session.currentPath}/${item.filename}'.replaceAll('//', '/'),
             isDirectory: isDir,
             size: item.attr.size ?? 0,
             modified: DateTime.fromMillisecondsSinceEpoch((item.attr.modifyTime ?? 0) * 1000),
+            mode: item.attr.mode?.value,
+            owner: og?.$1,
+            group: og?.$2,
           ));
         }
       } else {
@@ -5823,11 +5925,21 @@ class FileSystemEntityInfo {
   final int size;
   final DateTime modified;
 
+  /// Unix permission bits (remote SFTP only; null when unknown).
+  final int? mode;
+
+  /// Owner / group names (or numeric ids) for remote entries.
+  final String? owner;
+  final String? group;
+
   FileSystemEntityInfo({
     required this.name,
     required this.path,
     required this.isDirectory,
     required this.size,
     required this.modified,
+    this.mode,
+    this.owner,
+    this.group,
   });
 }

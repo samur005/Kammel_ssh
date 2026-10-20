@@ -325,7 +325,11 @@ class AppTerminalTheme {
     'dracula': dracula,
     'gruvbox': gruvbox,
     'nord': nord,
+    'monokai': monokai,
   };
+
+  /// The user's own palette ('custom'), set by AppState on load and on edit.
+  static TerminalTheme customTheme = monokai;
 
   /// (id, label) pairs for the Settings selector, 'auto' first.
   static const List<(String, String)> schemeOptions = [
@@ -333,12 +337,76 @@ class AppTerminalTheme {
     ('dracula', 'DRACULA'),
     ('gruvbox', 'GRUVBOX'),
     ('nord', 'NORD'),
+    ('monokai', 'MONOKAI'),
+    ('custom', 'CUSTOM'),
   ];
+
+  /// Keys of the editable custom palette, in [paletteOf] order.
+  static const List<String> paletteKeys = [
+    'foreground', 'background', 'black', 'red', 'green', 'yellow', 'blue',
+    'magenta', 'cyan', 'white', 'brightBlack', 'brightRed', 'brightGreen',
+    'brightYellow', 'brightBlue', 'brightMagenta', 'brightCyan', 'brightWhite',
+  ];
+
+  static List<Color> paletteOf(TerminalTheme t) => [
+        t.foreground, t.background, t.black, t.red, t.green, t.yellow,
+        t.blue, t.magenta, t.cyan, t.white, t.brightBlack, t.brightRed,
+        t.brightGreen, t.brightYellow, t.brightBlue, t.brightMagenta,
+        t.brightCyan, t.brightWhite,
+      ];
+
+  /// Builds a theme from 18 colors in [paletteKeys] order.
+  static TerminalTheme fromPalette(List<Color> c) {
+    assert(c.length == paletteKeys.length);
+    return TerminalTheme(
+      cursor: c[0],
+      selection: c[0].withValues(alpha: 0.25),
+      foreground: c[0],
+      background: c[1],
+      black: c[2],
+      red: c[3],
+      green: c[4],
+      yellow: c[5],
+      blue: c[6],
+      magenta: c[7],
+      cyan: c[8],
+      white: c[9],
+      brightBlack: c[10],
+      brightRed: c[11],
+      brightGreen: c[12],
+      brightYellow: c[13],
+      brightBlue: c[14],
+      brightMagenta: c[15],
+      brightCyan: c[16],
+      brightWhite: c[17],
+      searchHitBackground: c[5],
+      searchHitBackgroundCurrent: c[0],
+      searchHitForeground: c[1],
+    );
+  }
+
+  /// `#RRGGBB` strings ↔ palette, for persistence. Null when malformed.
+  static List<Color>? decodePalette(List<String>? hex) {
+    if (hex == null || hex.length != paletteKeys.length) return null;
+    final out = <Color>[];
+    for (final h in hex) {
+      final v = int.tryParse(h.replaceFirst('#', ''), radix: 16);
+      if (v == null || h.replaceFirst('#', '').length != 6) return null;
+      out.add(Color(0xFF000000 | v));
+    }
+    return out;
+  }
+
+  static List<String> encodePalette(List<Color> c) => [
+        for (final x in c)
+          '#${(x.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}'
+      ];
 
   /// Resolves a persisted scheme id to a palette; 'auto' (and anything
   /// unknown) falls back to the theme-paired palette.
   static TerminalTheme byId(String id, Brightness b, {Color? accentColor}) {
-    final theme = schemes[id] ?? forBrightness(b);
+    final theme =
+        id == 'custom' ? customTheme : (schemes[id] ?? forBrightness(b));
     if (accentColor != null) {
       return TerminalTheme(
         cursor: accentColor,
@@ -450,6 +518,33 @@ class AppTerminalTheme {
     searchHitBackground: Color(0xFFF1FA8C),
     searchHitBackgroundCurrent: Color(0xFFF8F8F2),
     searchHitForeground: Color(0xFF282A36),
+  );
+
+  /// Monokai (classic Sublime/TextMate palette).
+  static const TerminalTheme monokai = TerminalTheme(
+    cursor: Color(0xFFF8F8F0),
+    selection: Color(0x6649483E),
+    foreground: Color(0xFFF8F8F2),
+    background: Color(0xFF272822),
+    black: Color(0xFF272822),
+    red: Color(0xFFF92672),
+    green: Color(0xFFA6E22E),
+    yellow: Color(0xFFF4BF75),
+    blue: Color(0xFF66D9EF),
+    magenta: Color(0xFFAE81FF),
+    cyan: Color(0xFFA1EFE4),
+    white: Color(0xFFF8F8F2),
+    brightBlack: Color(0xFF75715E),
+    brightRed: Color(0xFFF92672),
+    brightGreen: Color(0xFFA6E22E),
+    brightYellow: Color(0xFFE6DB74),
+    brightBlue: Color(0xFF66D9EF),
+    brightMagenta: Color(0xFFAE81FF),
+    brightCyan: Color(0xFFA1EFE4),
+    brightWhite: Color(0xFFF9F8F5),
+    searchHitBackground: Color(0xFFE6DB74),
+    searchHitBackgroundCurrent: Color(0xFFF8F8F2),
+    searchHitForeground: Color(0xFF272822),
   );
 
   /// Gruvbox Dark (github.com/morhetz/gruvbox).
