@@ -1,5 +1,5 @@
 name: terminal_agent
-description: "KAMMEL SSH — gestor de conexiones SSH y explorador remoto para agentes IA."
+description: "ABSssh — gestor de conexiones SSH y explorador remoto para agentes IA."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -103,7 +103,7 @@ dependency_overrides:
   xterm:
     path: third_party/xterm
   # Patched fork of dartssh2 2.17.1. Two fixes, both documented inline with a
-  # "KAMMEL patch" comment: the channel receive window is never replenished once
+  # "ABSssh patch" comment: the channel receive window is never replenished once
   # exhausted (any transfer through a tunnel deadlocks at ~6 MB), and host key
   # verification only exposes an MD5 digest, too weak to pin on — the fork adds
   # a handler that receives the raw key blob so we can use SHA256.
@@ -151,7 +151,7 @@ flutter:
 
   assets:
     # Camel silhouette (white on transparent) — tinted at draw time.
-    - assets/images/kammel_logo.png
+    - assets/images/absssh_logo.png
     # Real agent marks, keyed by the same ids the detector and the Android
     # notification badges use (see AlertNotifier.agentBadge). Drawn as-is:
     # these are brand marks, so unlike the logo above they are never tinted.
