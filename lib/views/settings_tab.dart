@@ -13,6 +13,7 @@ import 'backup_sheet.dart';
 import 'onboarding_sheet.dart';
 import 'shortcuts_help_sheet.dart';
 import '../l10n/l10n.dart';
+import '../services/terminal_highlighter.dart';
 
 /// Central configuration screen for general app settings (Explorer, Notifications, Security, and SSH keys).
 class SettingsTab extends StatelessWidget {
@@ -118,6 +119,13 @@ class SettingsTab extends StatelessWidget {
           SwissPanel(
             title: tr('Conexión'),
             children: [_ConnectionPanel(state: state)],
+          ),
+          const SizedBox(height: 16),
+
+          // ---- Terminal output highlighting + editor safety ------------------
+          SwissPanel(
+            title: tr('Terminal y editor'),
+            children: [_TerminalEditorPanel(state: state)],
           ),
           const SizedBox(height: 16),
 
@@ -692,6 +700,66 @@ class _ConnectionPanel extends StatelessWidget {
                 .setConnectionTuning(t.copyWith(maxReconnectAttempts: v)),
           ),
         ],
+      ],
+    );
+  }
+}
+
+class _TerminalEditorPanel extends StatelessWidget {
+  final AppState state;
+  const _TerminalEditorPanel({required this.state});
+
+  String _name(HighlightCategory c) => switch (c) {
+        HighlightCategory.status => tr('Errores / avisos / éxito'),
+        HighlightCategory.logLevel => tr('Niveles de log'),
+        HighlightCategory.ip => tr('Direcciones IP'),
+        HighlightCategory.url => tr('URL'),
+        HighlightCategory.path => tr('Rutas'),
+        HighlightCategory.number => tr('Números'),
+        HighlightCategory.date => tr('Fechas y horas'),
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ToggleRow(
+          label: tr('RESALTADO DE SALIDA'),
+          description: tr('Colorea errores, avisos, IP, URL, rutas, números y fechas en la salida. No toca líneas que ya traen colores ANSI ni pantallas completas (vim, htop).'),
+          value: state.terminalHighlight,
+          onChanged: state.setTerminalHighlight,
+        ),
+        if (state.terminalHighlight)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final c in HighlightCategory.values)
+                  FilterChip(
+                    label: Text(_name(c), style: AppText.body(11)),
+                    selected: state.highlightCategories.contains(c),
+                    onSelected: (_) => state.toggleHighlightCategory(c),
+                  ),
+              ],
+            ),
+          ),
+        Hairline(),
+        ToggleRow(
+          label: tr('COPIA .BAK AL GUARDAR'),
+          description: tr('Antes de sobrescribir un archivo, guarda el original como nombre.bak junto a él.'),
+          value: state.editorBackupOnSave,
+          onChanged: state.setEditorBackupOnSave,
+        ),
+        Hairline(),
+        ToggleRow(
+          label: tr('MOSTRAR DIFERENCIAS ANTES DE GUARDAR'),
+          description: tr('Muestra las líneas añadidas y eliminadas y pide confirmación.'),
+          value: state.editorConfirmDiff,
+          onChanged: state.setEditorConfirmDiff,
+        ),
       ],
     );
   }

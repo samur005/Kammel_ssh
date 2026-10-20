@@ -26,6 +26,7 @@ import '../services/server_metrics.dart';
 import '../services/key_unlock.dart';
 import '../services/reconnect_policy.dart';
 import '../services/file_perms.dart';
+import '../services/terminal_highlighter.dart';
 import '../services/file_error.dart';
 import '../theme/app_theme.dart';
 import '../models/agent_activity.dart';
@@ -194,6 +195,9 @@ class TerminalSession {
   bool reconnecting = false;
   // Auto-reconnect bookkeeping (see AppState._scheduleAutoReconnect).
   Timer? autoReconnectTimer;
+
+  /// Lazily created when output highlighting is on.
+  TerminalHighlighter? highlighter;
   int autoReconnectAttempt = 0;
   // Why the last connection attempt failed (or why the live connection
   // dropped), classified for the UI. Cleared as soon as a connection succeeds,
@@ -408,6 +412,10 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   String? _editingFilePath;
   String? get editingFilePath => _editingFilePath;
   String _editingFileContent = '';
+
+  /// Content as last loaded/saved — the "before" side of the save diff.
+  String _editingFileBaseline = '';
+  String get editingFileBaseline => _editingFileBaseline;
   String get editingFileContent => _editingFileContent;
   bool _isFileDirty = false;
   bool get isFileDirty => _isFileDirty;
@@ -1546,6 +1554,10 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Entry point wired to every remote-output batch (see [_TerminalWriter]).
   void _onTerminalOutput(TerminalSession session) {
+    if (_terminalHighlight) {
+      (session.highlighter ??= TerminalHighlighter(session.terminal))
+          .onOutput(_highlightCategories);
+    }
     if (!_watchEnabled) return;
     if (_sessionCheckTimers.containsKey(session.id)) return;
     _sessionCheckTimers[session.id] = Timer(_agentCheckThrottle, () {
@@ -1833,6 +1845,8 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     _terminalLineHeight = (prefs.getDouble(_kTerminalLineHeight) ?? 1.3)
         .clamp(minTerminalLineHeight, maxTerminalLineHeight);
     _terminalHighlight = prefs.getBool(_kTerminalHighlight) ?? false;
+    _highlightCategories = decodeHighlightCategories(
+        prefs.getStringList(_kHighlightCategories));
     _editorBackupOnSave = prefs.getBool(_kEditorBackup) ?? true;
     _editorConfirmDiff = prefs.getBool(_kEditorConfirmDiff) ?? true;
 
@@ -2469,6 +2483,18 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   /// Rule-based highlighting of terminal output (see TerminalHighlighter).
   bool _terminalHighlight = false;
   bool get terminalHighlight => _terminalHighlight;
+  static const _kHighlightCategories = 'settings_terminal_highlight_categories';
+  Set<HighlightCategory> _highlightCategories = {...kDefaultHighlightCategories};
+  Set<HighlightCategory> get highlightCategories => _highlightCategories;
+  Future<void> toggleHighlightCategory(HighlightCategory c) async {
+    _highlightCategories = {..._highlightCategories};
+    if (!_highlightCategories.remove(c)) _highlightCategories.add(c);
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(
+        _kHighlightCategories, encodeHighlightCategories(_highlightCategories));
+  }
+
   Future<void> setTerminalHighlight(bool v) async {
     _terminalHighlight = v;
     notifyListeners();
@@ -5486,6 +5512,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
         _viewingImageBytes = null;
         _viewingMediaPath = null;
         _editingFileContent = content;
+        _editingFileBaseline = content;
         // Markdown and SVG files open in their formatted preview by default;
         // everything else goes straight to the raw code editor.
         _isPreviewMode = isMarkdownPath(file.path) || isSvgPath(file.path);
@@ -5522,9 +5549,12 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  Future<void> saveCurrentFile() async {
-    if (_editingFilePath == null) return;
-    
+  /// Saves the open file. When [editorBackupOnSave] is on, the current file
+  /// on disk is first copied to `<name>.bak`. Returns whether it was written.
+  Future<bool> saveCurrentFile() async {
+    if (_editingFilePath == null) return false;
+    var ok = false;
+
     final session = activeSession;
     if (session != null) {
       session.isLoadingFiles = true;
@@ -5540,6 +5570,23 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
           orElse: () => session ?? activeSession!,
         );
         final sftp = await _getSftpClient(editSession);
+        if (_editorBackupOnSave) {
+          try {
+            final orig = await sftp.open(_editingFilePath!,
+                mode: SftpFileOpenMode.read);
+            final old = await orig.readBytes().timeout(const Duration(seconds: 15));
+            await orig.close();
+            final bak = await sftp.open('${_editingFilePath!}.bak',
+                mode: SftpFileOpenMode.write |
+                    SftpFileOpenMode.create |
+                    SftpFileOpenMode.truncate);
+            await bak.write(Stream.value(old)).timeout(const Duration(seconds: 15));
+            await bak.close();
+          } on SftpStatusError catch (e) {
+            // No original yet (new file) is fine; anything else aborts.
+            if (e.code != SftpStatusCode.noSuchFile) rethrow;
+          }
+        }
         fileStream = await sftp.open(
           _editingFilePath!,
           mode: SftpFileOpenMode.write | SftpFileOpenMode.create | SftpFileOpenMode.truncate,
@@ -5547,9 +5594,14 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
         await fileStream.write(Stream.value(bytes)).timeout(const Duration(seconds: 15));
       } else {
         final localFile = File(_editingFilePath!);
+        if (_editorBackupOnSave && await localFile.exists()) {
+          await localFile.copy('${_editingFilePath!}.bak');
+        }
         await localFile.writeAsBytes(bytes);
       }
       _isFileDirty = false;
+      _editingFileBaseline = _editingFileContent;
+      ok = true;
       if (session != null) {
         session.terminal.write('Archivo guardado: ${_editingFilePath!.split("/").last}\r\n');
       }
@@ -5574,6 +5626,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
         notifyListeners();
       }
     }
+    return ok;
   }
 
   void closeFile() {
