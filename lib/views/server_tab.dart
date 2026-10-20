@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/connection_profile.dart';
 import '../providers/app_state.dart';
 import '../services/server_controller.dart';
+import 'server_monitor_extras.dart';
 import '../theme/app_theme.dart';
 import '../widgets/adaptive_sheet.dart';
 import '../widgets/docker_logo.dart';
@@ -1088,6 +1089,7 @@ class _ServerTabState extends State<ServerTab>
           ],
         ],
       ),
+      if (server.connected) MonitorExtras(server: server),
     ]);
   }
 
@@ -2064,12 +2066,16 @@ class _LogsSheet extends StatefulWidget {
 
 class _LogsSheetState extends State<_LogsSheet> {
   static const _tails = [100, 500, 1000];
+  static const _maxChars = 400000;
   int _tail = 100;
   String _logs = '';
   bool _loading = true;
   bool _follow = false;
-  Timer? _followTimer;
+  String _filter = '';
+  StreamSubscription<String>? _sub;
+  void Function()? _stopFollow;
   final ScrollController _scroll = ScrollController();
+  final TextEditingController _filterCtl = TextEditingController();
 
   @override
   void initState() {
@@ -2079,12 +2085,33 @@ class _LogsSheetState extends State<_LogsSheet> {
 
   @override
   void dispose() {
-    _followTimer?.cancel();
+    _stop();
     _scroll.dispose();
+    _filterCtl.dispose();
     super.dispose();
   }
 
+  void _stop() {
+    _sub?.cancel();
+    _sub = null;
+    _stopFollow?.call();
+    _stopFollow = null;
+  }
+
+  void _scrollToEnd() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scroll.hasClients) {
+        _scroll.jumpTo(_scroll.position.maxScrollExtent);
+      }
+    });
+  }
+
   Future<void> _load({bool quiet = false}) async {
+    if (_follow) {
+      // Re-start the live stream with the new tail.
+      await _startFollow();
+      return;
+    }
     if (!quiet) setState(() => _loading = true);
     final logs =
         await widget.server.fetchLogs(widget.container.id, tail: _tail);
@@ -2093,22 +2120,71 @@ class _LogsSheetState extends State<_LogsSheet> {
       _logs = logs;
       if (!quiet) _loading = false;
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scroll.hasClients) {
-        _scroll.jumpTo(_scroll.position.maxScrollExtent);
-      }
+    _scrollToEnd();
+  }
+
+  /// Real `docker logs -f` over one exec channel instead of polling.
+  Future<void> _startFollow() async {
+    _stop();
+    setState(() {
+      _loading = true;
+      _logs = '';
     });
+    final f =
+        await widget.server.followLogs(widget.container.id, tail: _tail);
+    if (!mounted) {
+      f?.stop();
+      return;
+    }
+    if (f == null) {
+      setState(() {
+        _loading = false;
+        _follow = false;
+      });
+      return;
+    }
+    _stopFollow = f.stop;
+    final buf = StringBuffer();
+    var pending = false;
+    _sub = f.lines.listen((line) {
+      buf.writeln(line);
+      // Coalesce bursts into one rebuild per frame.
+      if (pending) return;
+      pending = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        pending = false;
+        if (!mounted) return;
+        var text = _logs + buf.toString();
+        buf.clear();
+        if (text.length > _maxChars) {
+          text = text.substring(text.length - _maxChars);
+        }
+        setState(() => _logs = text);
+        _scrollToEnd();
+      });
+      WidgetsBinding.instance.scheduleFrame();
+    }, onDone: () {
+      if (mounted) setState(() => _follow = false);
+    });
+    setState(() => _loading = false);
   }
 
   void _toggleFollow() {
     setState(() => _follow = !_follow);
-    _followTimer?.cancel();
-    _followTimer = null;
     if (_follow) {
-      _followTimer = Timer.periodic(
-          const Duration(seconds: 3), (_) => _load(quiet: true));
-      _load(quiet: true);
+      _startFollow();
+    } else {
+      _stop();
     }
+  }
+
+  String get _visible {
+    if (_filter.isEmpty) return _logs;
+    final f = _filter.toLowerCase();
+    return _logs
+        .split('\n')
+        .where((l) => l.toLowerCase().contains(f))
+        .join('\n');
   }
 
   @override
@@ -2192,6 +2268,20 @@ class _LogsSheetState extends State<_LogsSheet> {
               ],
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+            child: TextField(
+              controller: _filterCtl,
+              autocorrect: false,
+              style: AppText.mono(11, color: AppColors.bone),
+              decoration: InputDecoration(
+                isDense: true,
+                prefixIcon: const Icon(Icons.filter_list, size: 16),
+                hintText: tr('Filtrar líneas…'),
+              ),
+              onChanged: (v) => setState(() => _filter = v.trim()),
+            ),
+          ),
           Expanded(
             child: Container(
               color: AppColors.ink,
@@ -2207,7 +2297,7 @@ class _LogsSheetState extends State<_LogsSheet> {
                   : SingleChildScrollView(
                       controller: _scroll,
                       child: SelectableText(
-                        _logs.isEmpty ? tr('(sin salida)') : _logs,
+                        _visible.isEmpty ? tr('(sin salida)') : _visible,
                         style: AppText.mono(10, color: AppColors.bone),
                       ),
                     ),
@@ -2370,6 +2460,13 @@ class _DetailsSheetState extends State<_DetailsSheet> {
                             _sectionTitle(tr('MONTAJES')),
                             _lines(d.mounts),
                             _sectionTitle(tr('ENTORNO · {0}', [d.env.length])),
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Text(
+                                  tr('Los valores que parecen secretos (contraseñas, tokens, claves) se ocultan.'),
+                                  style: AppText.mono(8.5,
+                                      color: AppColors.faint)),
+                            ),
                             _lines(d.env),
                           ],
                         ),

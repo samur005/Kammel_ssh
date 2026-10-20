@@ -22,6 +22,7 @@ import '../models/terminal_shortcut.dart';
 import '../models/terminal_key_layer.dart';
 import '../models/touch_pad.dart';
 import '../widgets/joystick_recognizer.dart';
+import '../services/server_metrics.dart';
 import '../services/key_unlock.dart';
 import '../services/reconnect_policy.dart';
 import '../services/file_error.dart';
@@ -3099,8 +3100,29 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   // listens to it directly (ListenableBuilder) so its refreshes don't trigger
   // app-wide rebuilds.
   ServerController? _server;
-  ServerController get server =>
-      _server ??= ServerController(openClient: openClient);
+  ServerController get server => _server ??=
+      ServerController(openClient: openClient)
+        ..onThresholdBreach = _onMonitorBreach;
+
+  void _onMonitorBreach(String server, List<ThresholdBreach> breaches) {
+    for (final b in breaches) {
+      final label = switch (b.kind) {
+        MetricKind.cpu => tr('CPU'),
+        MetricKind.ram => tr('RAM'),
+        MetricKind.disk => tr('Disco'),
+        MetricKind.swap => tr('Swap'),
+        MetricKind.inode => tr('Inodos'),
+      };
+      NotificationService.showAlert(
+        sessionId: 'monitor-$server-${b.kind.name}',
+        title: tr('Umbral superado en {0}', [server]),
+        body: tr('{0}: {1}% (límite {2}%)',
+            [label, (b.value * 100).toStringAsFixed(0), b.limit]),
+        kind: 'bell',
+        sessionName: server,
+      );
+    }
+  }
 
   /// How long a single hop gets: the TCP connect to the first machine, and
   /// each `direct-tcpip` forward opened through the previous one. Per hop

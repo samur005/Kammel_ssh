@@ -8,6 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/connection_profile.dart';
 import '../models/db_connection_profile.dart';
 import '../l10n/l10n.dart';
+import 'secret_mask.dart';
+import 'server_metrics.dart';
 
 /// Lifecycle of the server console: pick a server → connecting → managing.
 enum ServerPhase { pickServer, connecting, ready, error }
@@ -84,7 +86,11 @@ class ContainerDetails {
     required this.mounts,
     required this.networks,
     required this.env,
+    this.cmdMasked = false,
   });
+
+  /// Env values that look like secrets were replaced with •••.
+  final bool cmdMasked;
 }
 
 class DockerImage {
@@ -231,6 +237,28 @@ class ServerController extends ChangeNotifier {
   bool loading = false;
 
   ServerMonitor monitor = ServerMonitor();
+
+  /// Swap, inodes, network, processes, listening ports (see server_metrics).
+  ExtendedMetrics? extended;
+  DateTime? _extendedAt;
+
+  /// Threshold alerts and polling. Loaded from prefs on connect.
+  Thresholds thresholds = const Thresholds();
+  final ThresholdWatcher _watcher = ThresholdWatcher();
+
+  /// Auto-refresh of the monitor, in seconds (0 = manual only). Never below
+  /// 10 s so a phone left open on this screen can't hammer a small VPS.
+  int monitorIntervalSeconds = 30;
+  static const monitorIntervalChoices = [0, 10, 30, 60, 300];
+  Timer? _pollTimer;
+
+  /// Called with new threshold breaches; AppState turns them into alerts.
+  void Function(String profileName, List<ThresholdBreach> breaches)?
+      onThresholdBreach;
+
+  static const _kThresholds = 'settings_monitor_thresholds';
+  static const _kMonitorInterval = 'settings_monitor_interval';
+
   List<DockerContainer> containers = [];
   Map<String, String> containerStats = {};
   List<DockerImage> images = [];
@@ -300,7 +328,9 @@ class ServerController extends ChangeNotifier {
       landingSection = ServerSection.monitor;
       notifyListeners();
       await loadDbProfiles(p.id);
+      await _loadMonitorPrefs();
       await refresh();
+      _restartPolling();
     } catch (e) {
       if (gen != _generation) return;
       lastError = tr('No se pudo conectar: {0}', [e]);
@@ -313,6 +343,11 @@ class ServerController extends ChangeNotifier {
   /// to the server picker. [silent] skips the notify (used from [connect]).
   void disconnect({bool silent = false}) {
     _generation++;
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    extended = null;
+    _extendedAt = null;
+    _watcher.reset();
     _client?.close();
     _client = null;
     profile = null;
@@ -378,6 +413,136 @@ class ServerController extends ChangeNotifier {
     section = s;
     notifyListeners();
     refresh();
+    _restartPolling();
+  }
+
+  // ---- Polling & thresholds -------------------------------------------
+
+  Future<void> _loadMonitorPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    monitorIntervalSeconds = prefs.getInt(_kMonitorInterval) ?? 30;
+    final raw = prefs.getString(_kThresholds);
+    if (raw != null) {
+      try {
+        thresholds =
+            Thresholds.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+      } catch (_) {}
+    }
+  }
+
+  Future<void> setMonitorInterval(int seconds) async {
+    monitorIntervalSeconds = seconds;
+    notifyListeners();
+    _restartPolling();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_kMonitorInterval, seconds);
+  }
+
+  Future<void> setThresholds(Thresholds t) async {
+    thresholds = t;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kThresholds, jsonEncode(t.toJson()));
+  }
+
+  /// Polls only while connected and on the monitor section, and skips a tick
+  /// when the previous refresh is still running.
+  void _restartPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    final secs = monitorIntervalSeconds;
+    if (secs <= 0 || !connected || section != ServerSection.monitor) return;
+    _pollTimer = Timer.periodic(Duration(seconds: secs < 10 ? 10 : secs), (_) {
+      if (!connected || section != ServerSection.monitor) return;
+      if (loading || busy) return;
+      refresh();
+    });
+  }
+
+  void _checkThresholds() {
+    final ext = extended;
+    final breaches = _watcher.evaluate(thresholds, {
+      MetricKind.cpu: ext?.cpuPressure,
+      MetricKind.ram: monitor.loaded ? monitor.ramPercent : null,
+      MetricKind.disk: monitor.loaded ? monitor.diskPercent : null,
+      MetricKind.swap: ext?.swapPercent,
+      MetricKind.inode: ext?.inodePercent,
+    });
+    if (breaches.isNotEmpty) {
+      onThresholdBreach?.call(profile?.name ?? '', breaches);
+    }
+  }
+
+  // ---- Journal, network checks, live logs ------------------------------
+
+  static final RegExp _unitRe = RegExp(r'^[A-Za-z0-9@._:-]{1,128}$');
+
+  /// Recent journal lines (errors and worse by default), optionally for one
+  /// systemd unit. Falls back to sudo when the user can't read the journal.
+  Future<String> fetchJournal(
+      {String? unit, bool errorsOnly = true, int lines = 200}) async {
+    if (unit != null && !_unitRe.hasMatch(unit)) {
+      return tr('Identificador no válido: {0}', [unit]);
+    }
+    final args = [
+      '--no-pager',
+      '-n',
+      '${lines.clamp(10, 2000)}',
+      '-o',
+      'short-iso',
+      if (errorsOnly) ...['-p', 'err'],
+      if (unit != null) ...['-u', unit],
+    ].join(' ');
+    final probe = await _run('command -v journalctl >/dev/null 2>&1');
+    if (!probe.ok) {
+      return tr('journalctl no está disponible en este servidor.');
+    }
+    var r = await _run('journalctl $args 2>&1');
+    final text = r.stdout.trim();
+    if (!r.ok ||
+        text.contains('No journal files were opened due to insufficient permissions') ||
+        text.contains('not seeing messages from other users')) {
+      final pr = await _runPrivileged('journalctl $args');
+      if (pr.ok) r = pr;
+    }
+    final out = r.stdout.trim();
+    return out.isEmpty ? tr('(sin salida)') : maskUrlCredentials(out);
+  }
+
+  /// DNS / TCP / TLS check run *from the server*.
+  Future<NetCheckResult?> netCheck(NetCheckKind kind, String host,
+      {int? port}) async {
+    final String cmd;
+    try {
+      cmd = buildNetCheckCmd(kind, host.trim(), port: port);
+    } on ArgumentError {
+      return null;
+    }
+    final r = await _run(cmd);
+    return parseNetCheck(kind, r.stdout);
+  }
+
+  /// `docker logs -f`, streamed. Close the returned session to stop.
+  Future<({Stream<String> lines, void Function() stop})?> followLogs(String id,
+      {int tail = 200}) async {
+    if (_guardToken(id) != null) return null;
+    final client = _client;
+    if (client == null) return null;
+    final base = "docker logs -f --tail ${tail.clamp(0, 5000)} '$id' 2>&1";
+    final pw = _sudoPassword;
+    final cmd = !useSudo
+        ? base
+        : pw != null
+            ? "sudo -S -p '' sh -c \"$base\""
+            : "sudo -n sh -c \"$base\"";
+    final s = await client.execute(cmd);
+    if (useSudo && pw != null) {
+      s.stdin.add(Uint8List.fromList(utf8.encode('$pw\n')));
+    }
+    final lines = utf8.decoder
+        .bind(s.stdout.cast<List<int>>())
+        .transform(const LineSplitter());
+    return (lines: lines, stop: () => s.close());
   }
 
   Future<void> refresh() async {
@@ -674,6 +839,16 @@ fi
     }
     m.loaded = true;
     monitor = m;
+
+    final ext = await _run(extendedMetricsCmd);
+    if (ext.stdout.trim().isNotEmpty) {
+      final now = DateTime.now();
+      extended = parseExtendedMetrics(ext.stdout,
+          previous: extended,
+          elapsed: _extendedAt == null ? null : now.difference(_extendedAt!));
+      _extendedAt = now;
+    }
+    _checkThresholds();
   }
 
   static const Set<String> _knownServices = {
@@ -796,13 +971,16 @@ fi
           startedAt: _fmtIso(state['StartedAt'] as String?),
           state: state['Status'] as String? ?? '',
           restartPolicy: (policy == null || policy.isEmpty) ? 'no' : policy,
-          cmd: (config['Cmd'] as List?)?.join(' ') ?? '',
+          cmd: maskUrlCredentials((config['Cmd'] as List?)?.join(' ') ?? ''),
           restartCount: j['RestartCount'] as int? ?? 0,
           exitCode: state['ExitCode'] as int? ?? 0,
           ports: ports,
           mounts: mounts,
           networks: networks,
-          env: List<String>.from(config['Env'] as List? ?? const []),
+          env: List<String>.from(config['Env'] as List? ?? const [])
+              .map(maskEnvEntry)
+              .toList(),
+          cmdMasked: true,
         ),
         null
       );
