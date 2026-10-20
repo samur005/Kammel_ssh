@@ -35,7 +35,19 @@ class SecureStore {
   Future<void> deleteSecrets(String id) async {
     await _storage.delete(key: _pwKey(id));
     await _storage.delete(key: _pkKey(id));
+    await _storage.delete(key: _ppKey(id));
   }
+
+  // ---- Generic secrets (WebDAV credentials, sync password…) ---------------
+  Future<String?> read(String key) => _storage.read(key: key);
+  Future<void> write(String key, String? value) => _put(key, value);
+
+  // ---- Key passphrases ------------------------------------------------------
+  // Only stored when the user ticks "remember"; otherwise asked each time.
+  static String _ppKey(String id) => 'pp_$id';
+  Future<String?> readPassphrase(String id) => _storage.read(key: _ppKey(id));
+  Future<void> writePassphrase(String id, String? value) =>
+      _put(_ppKey(id), value);
 
   // ---- Device SSH key -------------------------------------------------------
   // The phone's own ed25519 identity (see DeviceKey). One per device, not tied
