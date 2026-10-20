@@ -61,7 +61,8 @@ void main() {
 
     state.setActiveTabIndex(5); // Ajustes
     await tester.pumpAndSettle();
-    _expectCheckedRadioOn(tester, 'Español');
+    // Nothing chosen yet: the picker follows the device (Spanish in tests).
+    _expectCheckedRadioOn(tester, 'Idioma del sistema');
 
     await tester.tap(find.text('English'));
     await tester.pumpAndSettle();
@@ -76,6 +77,12 @@ void main() {
     expect(L10n.lang, AppLang.es);
     expect(find.text('AJUSTES'), findsWidgets);
     _expectCheckedRadioOn(tester, 'Español');
+
+    // Back to "System": same language on screen, but the radio has to move.
+    await tester.tap(find.text('Idioma del sistema'));
+    await tester.pumpAndSettle();
+    expect(L10n.followsSystem.value, isTrue);
+    _expectCheckedRadioOn(tester, 'Idioma del sistema');
   });
 
   testWidgets('the shortcut layout dropdown shows the layout it just set',

@@ -1204,4 +1204,7 @@ const Map<String, String> enStrings = {
   'ÁMBAR': 'AMBER',
   'ÚLTIMOS EVENTOS': 'RECENT EVENTS',
   '… y {0} más': '… and {0} more',
+  'Idioma del sistema': 'System language',
+  'La app habla ruso.': 'The app speaks Russian.',
+  'Si no eliges un idioma, la app usa el del dispositivo (español, inglés, chino o ruso). Nueva opción «Idioma del sistema» en Ajustes.': 'If you have not picked a language, the app uses the device one (Spanish, English, Chinese or Russian). New "System language" option in Settings.',
 };

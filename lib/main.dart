@@ -53,6 +53,7 @@ Future<void> main() async {
   // Resolve the UI language before the first frame, otherwise the app would
   // flash in Spanish and then swap.
   await L10n.load();
+  WidgetsBinding.instance.addObserver(_SystemLocaleObserver());
 
   final appState = AppState();
 
@@ -232,4 +233,11 @@ class _LockGate extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Follows a device-language change made while the app is running, as long
+/// as the user has not picked a language explicitly (see [L10n.followsSystem]).
+class _SystemLocaleObserver with WidgetsBindingObserver {
+  @override
+  void didChangeLocales(List<Locale>? locales) => L10n.onSystemLocalesChanged();
 }

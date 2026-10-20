@@ -1196,4 +1196,7 @@ const Map<String, String> ruStrings = {
   'ÁMBAR': 'ЯНТАРНЫЙ',
   'ÚLTIMOS EVENTOS': 'ПОСЛЕДНИЕ СОБЫТИЯ',
   '… y {0} más': '… и ещё {0}',
+  'Idioma del sistema': 'Язык системы',
+  'La app habla ruso.': 'Приложение говорит по-русски.',
+  'Si no eliges un idioma, la app usa el del dispositivo (español, inglés, chino o ruso). Nueva opción «Idioma del sistema» en Ajustes.': 'Если язык не выбран, приложение использует язык устройства (испанский, английский, китайский или русский). Новый пункт «Язык системы» в настройках.',
 };
