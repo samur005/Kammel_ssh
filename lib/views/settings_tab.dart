@@ -656,6 +656,9 @@ class _ConnectionPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Subscribe: the parent tab only reads AppState, so without this the
+    // switches never reflected a change until something else rebuilt.
+    final state = context.watch<AppState>();
     final t = state.connectionTuning;
     String secs(int v) => v == 0 ? tr('Desactivado') : tr('{0} s', [v]);
     return Column(
@@ -721,6 +724,9 @@ class _TerminalEditorPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Subscribe: the parent tab only reads AppState, so without this the
+    // switches never reflected a change until something else rebuilt.
+    final state = context.watch<AppState>();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

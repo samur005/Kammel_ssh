@@ -1556,7 +1556,8 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   void _onTerminalOutput(TerminalSession session) {
     if (_terminalHighlight) {
       (session.highlighter ??= TerminalHighlighter(session.terminal))
-          .onOutput(_highlightCategories);
+        ..allowAltBuffer = session.activeProfile?.useTmux ?? false
+        ..onOutput(_highlightCategories);
     }
     if (!_watchEnabled) return;
     if (_sessionCheckTimers.containsKey(session.id)) return;

@@ -130,17 +130,28 @@ class TerminalHighlighter {
 
   int _lastCursorAbs = -1;
 
+  /// When true the alternate screen is processed too. Used for tmux sessions,
+  /// whose panes are plain shell output drawn on the alt screen.
+  bool allowAltBuffer = false;
+
   /// Applies highlighting to completed lines written since the last pass.
+  ///
+  /// Always rescans the visible viewport above the cursor in addition to the
+  /// lines the cursor moved past: the absolute cursor row stops growing once
+  /// the scrollback is full (and shifts on resize/reflow), so a pure
+  /// "since last cursor row" window silently stopped coloring anything in
+  /// long sessions. Rescanning is idempotent and cheap: already-colored lines
+  /// are rejected on their first non-default cell.
   void onOutput(Set<HighlightCategory> enabled) {
-    if (enabled.isEmpty || terminal.isUsingAltBuffer) {
+    if (enabled.isEmpty || (terminal.isUsingAltBuffer && !allowAltBuffer)) {
       _lastCursorAbs = -1;
       return;
     }
     final buffer = terminal.buffer;
     final lines = buffer.lines;
     final cur = buffer.absoluteCursorY;
-    var from = _lastCursorAbs < 0 ? cur - maxLinesPerPass : _lastCursorAbs;
-    if (from > cur) from = cur - 1; // scrollback trimmed / cleared
+    var from = cur - terminal.viewHeight;
+    if (_lastCursorAbs >= 0 && _lastCursorAbs < from) from = _lastCursorAbs;
     if (cur - from > maxLinesPerPass) from = cur - maxLinesPerPass;
     if (from < 0) from = 0;
     for (var y = from; y < cur && y < lines.length; y++) {
