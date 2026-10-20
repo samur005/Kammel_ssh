@@ -33,20 +33,40 @@ object AlertNotifier {
 
     private fun channelId(kind: String, level: String) = "${CHANNEL_PREFIX}_${kind}_$level"
 
-    private fun kindTitle(kind: String): String = when (kind) {
-        "question" -> "El agente pregunta"
-        "done" -> "El agente terminó"
-        "bell" -> "Campana del programa"
-        "disconnect" -> "Sesión caída"
-        else -> "Avisos de agente"
+    private fun kindTitle(context: Context, kind: String): String = when (kind) {
+        "question" -> NativeStrings.get(context, "alert_question", R.string.alert_question)
+        "done" -> NativeStrings.get(context, "alert_done", R.string.alert_done)
+        "bell" -> NativeStrings.get(context, "alert_bell", R.string.alert_bell)
+        "disconnect" -> NativeStrings.get(context, "alert_disconnect", R.string.alert_disconnect)
+        else -> NativeStrings.get(context, "alert_default", R.string.alert_default)
     }
 
-    private fun kindDescription(kind: String): String = when (kind) {
-        "question" -> "El agente espera una respuesta, un permiso o una selección"
-        "done" -> "El agente dejó de escribir sin pedir nada"
-        "bell" -> "El programa pidió atención explícitamente (campana u OSC 9/777)"
-        "disconnect" -> "Se perdió la conexión SSH de una sesión"
-        else -> "Una sesión de terminal pide tu atención"
+    private fun kindDescription(context: Context, kind: String): String = when (kind) {
+        "question" -> NativeStrings.get(context, "alert_question_desc", R.string.alert_question_desc)
+        "done" -> NativeStrings.get(context, "alert_done_desc", R.string.alert_done_desc)
+        "bell" -> NativeStrings.get(context, "alert_bell_desc", R.string.alert_bell_desc)
+        "disconnect" -> NativeStrings.get(context, "alert_disconnect_desc", R.string.alert_disconnect_desc)
+        else -> NativeStrings.get(context, "alert_default_desc", R.string.alert_default_desc)
+    }
+
+    /** Renames existing channels after a language change. */
+    fun relabelChannels(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val manager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        for (ch in manager.notificationChannels) {
+            val id = ch.id
+            if (id == CHANNEL_ID) {
+                ch.name = kindTitle(context, "")
+                ch.description = kindDescription(context, "")
+                manager.createNotificationChannel(ch)
+            } else if (id.startsWith(CHANNEL_PREFIX + "_")) {
+                val kind = id.removePrefix(CHANNEL_PREFIX + "_").substringBeforeLast('_')
+                ch.name = kindTitle(context, kind)
+                ch.description = kindDescription(context, kind)
+                manager.createNotificationChannel(ch)
+            }
+        }
     }
 
     private fun importanceFor(level: String): Int = when (level) {
@@ -131,8 +151,8 @@ object AlertNotifier {
             val id = channelId(kind, level)
             if (manager.getNotificationChannel(id) != null) continue
             manager.createNotificationChannel(
-                NotificationChannel(id, kindTitle(kind), importanceFor(level)).apply {
-                    description = kindDescription(kind)
+                NotificationChannel(id, kindTitle(context, kind), importanceFor(level)).apply {
+                    description = kindDescription(context, kind)
                 },
             )
         }
@@ -155,7 +175,7 @@ object AlertNotifier {
         val activeChannel = if (kind != null && level != null && level != "off") {
             channelId(kind, level)
         } else {
-            createChannel(manager)
+            createChannel(context, manager)
             CHANNEL_ID
         }
 
@@ -227,8 +247,11 @@ object AlertNotifier {
             Notification.Builder(context).setPriority(Notification.PRIORITY_HIGH)
         }
         val summary = builder
-            .setContentTitle("KAMMEL")
-            .setContentText("$alerts sesiones piden tu atención")
+            .setContentTitle(context.getString(R.string.app_name))
+            .setContentText(
+                NativeStrings.get(context, "alert_summary", R.string.alert_summary)
+                    .replace("%d", alerts.toString()),
+            )
             .setSmallIcon(R.drawable.ic_notification)
             .setColor(Color.parseColor("#007AFF"))
             .setGroup(GROUP_KEY)
@@ -269,16 +292,15 @@ object AlertNotifier {
     private fun notificationId(sessionId: String): Int =
         ID_BASE + (sessionId.hashCode().let { if (it < 0) -it else it } % ID_RANGE)
 
-    private fun createChannel(manager: NotificationManager) {
+    private fun createChannel(context: Context, manager: NotificationManager) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         if (manager.getNotificationChannel(CHANNEL_ID) != null) return
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "Avisos de agente",
+            kindTitle(context, ""),
             NotificationManager.IMPORTANCE_HIGH,
         ).apply {
-            description =
-                "Una sesión de terminal pide tu atención (el agente espera una respuesta)"
+            description = kindDescription(context, "")
         }
         manager.createNotificationChannel(channel)
     }

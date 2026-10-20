@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="fg_title">ABSssh работает</string>
+    <string name="fg_text">Сеансы продолжают работать в фоне</string>
+    <string name="fg_text_wakelock">Wakelock включён · задачи идут при выключенном экране</string>
+    <string name="fg_acquire">Включить wakelock</string>
+    <string name="fg_release">Отключить wakelock</string>
+    <string name="fg_exit">Выход</string>
+    <string name="fg_channel_name">Фоновые сеансы</string>
+    <string name="fg_channel_desc">Поддерживает терминалы, пока приложение свёрнуто</string>
+    <string name="alert_question">Агент спрашивает</string>
+    <string name="alert_question_desc">Агент закончил</string>
+    <string name="alert_done">Агент ждёт ответа, разрешения или выбора</string>
+    <string name="alert_done_desc">Агент перестал писать, ничего не спросив</string>
+    <string name="alert_bell">Сигнал программы</string>
+    <string name="alert_bell_desc">Программа явно запросила внимание (сигнал или OSC 9/777)</string>
+    <string name="alert_disconnect">Сеанс оборвался</string>
+    <string name="alert_disconnect_desc">SSH-соединение сеанса потеряно</string>
+    <string name="alert_default">Оповещения агентов</string>
+    <string name="alert_default_desc">Терминальный сеанс требует вашего внимания</string>
+    <string name="alert_summary">Сеансов, требующих внимания: %d</string>
+</resources>

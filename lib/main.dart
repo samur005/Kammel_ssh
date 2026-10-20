@@ -6,6 +6,7 @@ import 'package:window_manager/window_manager.dart';
 import 'l10n/l10n.dart';
 import 'providers/app_state.dart';
 import 'services/agent_monitor.dart';
+import 'services/background_service.dart';
 import 'services/tunnel_manager.dart';
 import 'services/window_geometry.dart';
 import 'theme/app_theme.dart';
@@ -54,6 +55,9 @@ Future<void> main() async {
   // Resolve the UI language before the first frame, otherwise the app would
   // flash in Spanish and then swap.
   await L10n.load();
+  // Native notification texts follow the app language, not the device's.
+  BackgroundService.pushStrings();
+  L10n.notifier.addListener(BackgroundService.pushStrings);
   WidgetsBinding.instance.addObserver(_SystemLocaleObserver());
 
   final appState = AppState();

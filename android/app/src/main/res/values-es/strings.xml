@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="fg_title">ABSssh activo</string>
+    <string name="fg_text">Las sesiones siguen ejecutándose en segundo plano</string>
+    <string name="fg_text_wakelock">Wakelock activo · las tareas siguen con la pantalla apagada</string>
+    <string name="fg_acquire">Adquirir wakelock</string>
+    <string name="fg_release">Liberar wakelock</string>
+    <string name="fg_exit">Salir</string>
+    <string name="fg_channel_name">Sesiones en segundo plano</string>
+    <string name="fg_channel_desc">Mantiene las terminales activas mientras la app está minimizada</string>
+    <string name="alert_question">El agente pregunta</string>
+    <string name="alert_question_desc">El agente terminó</string>
+    <string name="alert_done">El agente espera una respuesta, un permiso o una selección</string>
+    <string name="alert_done_desc">El agente dejó de escribir sin pedir nada</string>
+    <string name="alert_bell">Campana del programa</string>
+    <string name="alert_bell_desc">El programa pidió atención explícitamente (campana u OSC 9/777)</string>
+    <string name="alert_disconnect">Sesión caída</string>
+    <string name="alert_disconnect_desc">Se perdió la conexión SSH de una sesión</string>
+    <string name="alert_default">Avisos de agente</string>
+    <string name="alert_default_desc">Una sesión de terminal pide tu atención</string>
+    <string name="alert_summary">%d sesiones piden tu atención</string>
+</resources>
