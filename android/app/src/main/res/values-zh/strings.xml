@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="fg_title">ABSssh 正在运行</string>
+    <string name="fg_text">会话在后台继续运行</string>
+    <string name="fg_text_wakelock">唤醒锁已开启 · 熄屏后任务继续</string>
+    <string name="fg_acquire">获取唤醒锁</string>
+    <string name="fg_release">释放唤醒锁</string>
+    <string name="fg_exit">退出</string>
+    <string name="fg_channel_name">后台会话</string>
+    <string name="fg_channel_desc">在应用最小化时保持终端运行</string>
+    <string name="alert_question">智能体在提问</string>
+    <string name="alert_question_desc">智能体已完成</string>
+    <string name="alert_done">智能体正在等待回答、授权或选择</string>
+    <string name="alert_done_desc">智能体停止输出且未提出请求</string>
+    <string name="alert_bell">程序响铃</string>
+    <string name="alert_bell_desc">程序明确请求关注（响铃或 OSC 9/777）</string>
+    <string name="alert_disconnect">会话已断开</string>
+    <string name="alert_disconnect_desc">某个会话的 SSH 连接已断开</string>
+    <string name="alert_default">智能体提醒</string>
+    <string name="alert_default_desc">有终端会话需要你关注</string>
+    <string name="alert_summary">%d 个会话需要你关注</string>
+</resources>

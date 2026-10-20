@@ -1,6 +1,6 @@
 # Security policy
 
-Kammel is an SSH client. It holds passwords and private keys, pins host keys, and
+ABSssh is an SSH client. It holds passwords and private keys, pins host keys, and
 opens tunnels through the device. A bug in any of those is a real risk to the
 people using it, so security reports get priority over everything else.
 
@@ -8,7 +8,7 @@ people using it, so security reports get priority over everything else.
 
 **Do not open a public issue.** Use GitHub's private reporting:
 
-→ [Report a vulnerability](https://github.com/Jhongdlp/Kammel_ssh/security/advisories/new)
+→ [Report a vulnerability](https://github.com/samur005/Kammel_ssh/security/advisories/new)
 
 If that is not available to you, that is reason enough to open an issue saying
 only *"I have a security report, how do I reach you privately?"* — with no

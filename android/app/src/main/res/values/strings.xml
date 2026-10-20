@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">ABSssh</string>
+    <string name="fg_title">ABSssh is running</string>
+    <string name="fg_text">Sessions keep running in the background</string>
+    <string name="fg_text_wakelock">Wakelock on · tasks continue with the screen off</string>
+    <string name="fg_acquire">Acquire wakelock</string>
+    <string name="fg_release">Release wakelock</string>
+    <string name="fg_exit">Exit</string>
+    <string name="fg_channel_name">Background sessions</string>
+    <string name="fg_channel_desc">Keeps terminals alive while the app is minimized</string>
+    <string name="alert_question">The agent is asking</string>
+    <string name="alert_question_desc">The agent finished</string>
+    <string name="alert_done">The agent is waiting for an answer, a permission or a choice</string>
+    <string name="alert_done_desc">The agent stopped writing without asking anything</string>
+    <string name="alert_bell">Program bell</string>
+    <string name="alert_bell_desc">The program explicitly asked for attention (bell or OSC 9/777)</string>
+    <string name="alert_disconnect">Session dropped</string>
+    <string name="alert_disconnect_desc">The SSH connection of a session was lost</string>
+    <string name="alert_default">Agent alerts</string>
+    <string name="alert_default_desc">A terminal session needs your attention</string>
+    <string name="alert_summary">%d sessions need your attention</string>
+</resources>

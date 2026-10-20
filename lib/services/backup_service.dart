@@ -95,6 +95,8 @@ class BackupService {
     data.removeWhere((_, v) => (v as Map)['type'] == 'unsupported');
 
     final envelope = <String, dynamic>{
+      // Format marker kept from the Kammel era on purpose: older app
+      // versions (and other devices) must still recognise these files.
       'kammel_backup': formatVersion,
       'createdAt': DateTime.now().toIso8601String(),
       'includesSecrets': includeSecrets,
@@ -132,7 +134,7 @@ class BackupService {
   }
 
   /// Writes the backup where the user can actually find it: the shared
-  /// `Download/KAMMEL` folder on Android (same destination the SFTP downloader
+  /// `Download/ABSssh` folder on Android (same destination the SFTP downloader
   /// uses), the app documents directory elsewhere. Returns the file.
   static Future<File> writeToDisk(Map<String, dynamic> envelope,
       {String? password}) async {
@@ -143,13 +145,13 @@ class BackupService {
         .first;
     final encrypted = password != null && password.isNotEmpty;
     final name = encrypted
-        ? 'kammel-backup-$stamp.enc.json'
-        : 'kammel-backup-$stamp.json';
+        ? 'absssh-backup-$stamp.enc.json'
+        : 'absssh-backup-$stamp.json';
 
     String dir;
     if (Platform.isAndroid &&
         await Directory('/storage/emulated/0/Download').exists()) {
-      dir = '/storage/emulated/0/Download/KAMMEL';
+      dir = '/storage/emulated/0/Download/ABSssh';
     } else {
       dir = (await getApplicationDocumentsDirectory()).path;
     }
@@ -198,7 +200,7 @@ class BackupService {
     try {
       parsed = json.decode(text) as Map<String, dynamic>;
     } catch (_) {
-      return (null, tr('Ese archivo no es una copia de KAMMEL.'));
+      return (null, tr('Ese archivo no es una copia de ABSssh.'));
     }
     if (!BackupCrypto.isEncrypted(parsed)) return (parsed, null);
     final password = await askPassword();
@@ -218,7 +220,7 @@ class BackupService {
         BackupCryptoFailure.wrongPasswordOrCorrupt =>
           tr('Contraseña incorrecta o copia dañada.'),
         BackupCryptoFailure.unsupportedVersion =>
-          tr('La copia cifrada usa un formato más nuevo. Actualiza KAMMEL.'),
+          tr('La copia cifrada usa un formato más nuevo. Actualiza ABSssh.'),
         BackupCryptoFailure.unsupportedAlgorithm =>
           tr('La copia cifrada usa un algoritmo desconocido.'),
         BackupCryptoFailure.emptyPassword => tr('La contraseña no puede estar vacía.'),
@@ -274,15 +276,15 @@ class BackupService {
   /// is testable without a file picker.
   static Future<({int keys, int secrets, String? error})> restore(
       Map<String, dynamic> envelope) async {
-    final version = envelope['kammel_backup'];
+    final version = envelope['kammel_backup'] ?? envelope['absssh_backup'];
     if (version is! int) {
-      return _result(0, 0, tr('Ese archivo no es una copia de KAMMEL.'));
+      return _result(0, 0, tr('Ese archivo no es una copia de ABSssh.'));
     }
     if (version > formatVersion) {
       return _result(
           0,
           0,
-          tr('La copia se hizo con una versión más nueva de la app (formato {0}). Actualiza KAMMEL e inténtalo de nuevo.',
+          tr('La copia se hizo con una versión más nueva de la app (formato {0}). Actualiza ABSssh e inténtalo de nuevo.',
               [version]));
     }
 

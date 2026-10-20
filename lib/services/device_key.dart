@@ -16,7 +16,7 @@ import 'secure_store.dart';
 class DeviceKey {
   DeviceKey._();
 
-  static const String _comment = 'kammel@device';
+  static const String _comment = 'absssh@device';
 
   /// Cached PEM for the current process (secure-storage reads are slow on
   /// Android; the key never changes underneath us except via [generate]).

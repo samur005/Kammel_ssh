@@ -125,7 +125,13 @@ class SyncState {
 /// a concurrent write by another device is detected rather than overwritten.
 /// The server only ever sees the encrypted container.
 class WebDavSyncEngine {
-  static const remoteName = 'kammel-sync.enc.json';
+  static const remoteName = 'absssh-sync.enc.json';
+
+  /// File written by versions before the ABSssh rename. Read (once) when the
+  /// new file does not exist yet; the next upload goes to [remoteName].
+  static const legacyRemoteName = 'kammel-sync.enc.json';
+
+  String _readName = remoteName;
 
   final WebDavClient dav;
   final String syncPassword;
@@ -163,7 +169,15 @@ class WebDavSyncEngine {
 
   Future<SyncOutcome> _sync() async {
     final state = await loadState();
-    final remoteTag = await dav.etag(remoteName);
+    _readName = remoteName;
+    var remoteTag = await dav.etag(remoteName);
+    if (remoteTag == null) {
+      final legacyTag = await dav.etag(legacyRemoteName);
+      if (legacyTag != null) {
+        _readName = legacyRemoteName;
+        remoteTag = legacyTag;
+      }
+    }
     final local = await buildLocal();
     final localHash = BackupService.contentHash(local);
     final localChanged = state.localHash != localHash;
@@ -209,7 +223,7 @@ class WebDavSyncEngine {
       case SyncConflictChoice.keepBoth:
         final stamp =
             now().toUtc().toIso8601String().replaceAll(':', '-').split('.').first;
-        await dav.put('kammel-sync-conflict-$stamp.enc.json',
+        await dav.put('absssh-sync-conflict-$stamp.enc.json',
             json.encode(await encrypt(json.encode(local), syncPassword)));
         await _apply(remote.envelope, remote.etag ?? remoteTag);
         return SyncOutcome.keptBoth;
@@ -219,6 +233,11 @@ class WebDavSyncEngine {
   Future<void> _upload(Map<String, dynamic> local, String localHash,
       {String? ifMatch, bool mustNotExist = false}) async {
     final container = await encrypt(json.encode(local), syncPassword);
+    if (_readName != remoteName) {
+      // Migrating from the legacy file: the new one must not exist yet.
+      ifMatch = null;
+      mustNotExist = true;
+    }
     final tag = await dav.put(remoteName, json.encode(container),
         ifMatch: ifMatch, mustNotExist: mustNotExist);
     await saveState(
@@ -226,7 +245,7 @@ class WebDavSyncEngine {
   }
 
   Future<({Map<String, dynamic> envelope, String? etag})> _download() async {
-    final got = await dav.get(remoteName);
+    final got = await dav.get(_readName);
     if (got == null) throw const WebDavError(404);
     final container = json.decode(got.body) as Map<String, dynamic>;
     final clear = await decrypt(container, syncPassword);

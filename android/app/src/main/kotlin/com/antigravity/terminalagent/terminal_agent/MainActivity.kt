@@ -68,6 +68,15 @@ class MainActivity : FlutterFragmentActivity() {
                         startService(TerminalService.ACTION_START)
                         result.success(true)
                     }
+                    "setNativeStrings" -> {
+                        val strings =
+                            call.argument<Map<String, String>>("strings").orEmpty()
+                        NativeStrings.save(this, strings)
+                        AlertNotifier.relabelChannels(this)
+                        // Refresh the persistent notification only if it is up.
+                        if (TerminalService.isRunning) startService(TerminalService.ACTION_REFRESH)
+                        result.success(true)
+                    }
                     "stopBackgroundService" -> {
                         startService(TerminalService.ACTION_STOP)
                         result.success(true)
@@ -89,7 +98,7 @@ class MainActivity : FlutterFragmentActivity() {
                         AlertNotifier.show(
                             this,
                             call.argument<String>("sessionId") ?: "",
-                            call.argument<String>("title") ?: "KAMMEL",
+                            call.argument<String>("title") ?: getString(R.string.app_name),
                             call.argument<String>("body") ?: "",
                             call.argument<String>("agent"),
                             call.argument<String>("kind"),

@@ -46,7 +46,7 @@ class _BackupSheetState extends State<_BackupSheet> {
     if (_encrypt) {
       final r = await showSecretPrompt(context,
           title: tr('CIFRAR COPIA'),
-          message: tr('Elige una contraseña para la copia. Sin ella no se puede recuperar: KAMMEL no la guarda.'),
+          message: tr('Elige una contraseña para la copia. Sin ella no se puede recuperar: ABSssh no la guarda.'),
           confirm: true);
       if (r == null || !mounted) return;
       password = r.value;

@@ -37,12 +37,12 @@ static void my_application_activate(GApplication* application) {
   // would force us to reimplement all eight of them by hand.
   GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
   gtk_widget_show(GTK_WIDGET(header_bar));
-  gtk_header_bar_set_title(header_bar, "KAMMEL SSH");
+  gtk_header_bar_set_title(header_bar, "ABSssh");
   gtk_header_bar_set_show_close_button(header_bar, TRUE);
   gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
   // Also set the window title: it is what the task bar and alt-tab show, and
   // the custom bar replaces only the on-screen chrome.
-  gtk_window_set_title(window, "KAMMEL SSH");
+  gtk_window_set_title(window, "ABSssh");
 
   gtk_window_set_default_size(window, 1280, 720);
 

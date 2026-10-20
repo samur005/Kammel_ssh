@@ -6,6 +6,7 @@ import 'package:window_manager/window_manager.dart';
 import 'l10n/l10n.dart';
 import 'providers/app_state.dart';
 import 'services/agent_monitor.dart';
+import 'services/background_service.dart';
 import 'services/tunnel_manager.dart';
 import 'services/window_geometry.dart';
 import 'theme/app_theme.dart';
@@ -34,7 +35,7 @@ Future<void> main() async {
       WindowOptions(
         size: geometry.size,
         minimumSize: WindowGeometry.minimumSize,
-        title: 'KAMMEL SSH',
+        title: 'ABSssh',
         // The app draws its own title bar (WindowTitleBar). Applied here,
         // inside waitUntilReadyToShow, so the GTK header bar is gone before
         // the window is ever put on screen instead of flashing first.
@@ -54,6 +55,9 @@ Future<void> main() async {
   // Resolve the UI language before the first frame, otherwise the app would
   // flash in Spanish and then swap.
   await L10n.load();
+  // Native notification texts follow the app language, not the device's.
+  BackgroundService.pushStrings();
+  L10n.notifier.addListener(BackgroundService.pushStrings);
   WidgetsBinding.instance.addObserver(_SystemLocaleObserver());
 
   final appState = AppState();
@@ -151,7 +155,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     return ValueListenableBuilder<AppLang>(
       valueListenable: L10n.notifier,
       builder: (context, lang, _) => MaterialApp(
-        title: 'KAMMEL SSH',
+        title: 'ABSssh',
         navigatorKey: navigatorKey,
         debugShowCheckedModeBanner: false,
         locale: Locale(lang.code),

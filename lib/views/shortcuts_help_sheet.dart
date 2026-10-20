@@ -8,7 +8,7 @@ import 'shell/app_commands.dart';
 
 /// The reference for everything the app can do that isn't a button.
 ///
-/// KAMMEL is full of gestures that are genuinely good and completely invisible:
+/// ABSssh is full of gestures that are genuinely good and completely invisible:
 /// hold-and-drag for the arrow joystick, pinch to resize the font, swipe to
 /// change quick-key layer, long-press to move the explorer dock, double-tap to
 /// rename a session. Until now none of them were written down anywhere, so a
@@ -97,7 +97,7 @@ class ShortcutsHelpView extends StatelessWidget {
                         color: AppColors.bone, spacing: 1.4)),
                 const SizedBox(height: 8),
                 Text(
-                  tr('Casi todo lo que hace KAMMEL rápido está aquí. Puedes volver a esta pantalla desde el menú de la terminal o con Ctrl+Shift+I.'),
+                  tr('Casi todo lo que hace ABSssh rápido está aquí. Puedes volver a esta pantalla desde el menú de la terminal o con Ctrl+Shift+I.'),
                   style: AppText.body(12, color: AppColors.muted),
                 ),
               ],

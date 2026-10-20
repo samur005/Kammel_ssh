@@ -14,7 +14,7 @@ import android.os.PowerManager
 
 /**
  * Foreground service that keeps the app process (and therefore every running
- * PTY/SSH shell) alive while KAMMEL is in the background, mirroring the way
+ * PTY/SSH shell) alive while ABSssh is in the background, mirroring the way
  * Termux stays alive. It shows a persistent notification with two actions:
  *
  *  - "Adquirir/Liberar wakelock": toggles a partial wakelock so long-running
@@ -26,12 +26,18 @@ class TerminalService : Service() {
     companion object {
         const val ACTION_START = "com.antigravity.terminalagent.action.START"
         const val ACTION_STOP = "com.antigravity.terminalagent.action.STOP"
+        const val ACTION_REFRESH = "com.antigravity.terminalagent.action.REFRESH"
         const val ACTION_TOGGLE_WAKELOCK =
             "com.antigravity.terminalagent.action.TOGGLE_WAKELOCK"
 
+        /** True between onCreate and onDestroy. */
+        @Volatile var isRunning = false
+
+        // Channel id kept from the ABSssh era: renaming it would create a new
+        // channel and drop the user's per-channel notification settings.
         private const val CHANNEL_ID = "kammel_background"
         private const val NOTIFICATION_ID = 1001
-        private const val WAKELOCK_TAG = "KAMMEL::BackgroundWakeLock"
+        private const val WAKELOCK_TAG = "ABSssh::BackgroundWakeLock"
     }
 
     private var wakeLock: PowerManager.WakeLock? = null
@@ -53,7 +59,13 @@ class TerminalService : Service() {
         return START_STICKY
     }
 
+    override fun onCreate() {
+        super.onCreate()
+        isRunning = true
+    }
+
     override fun onDestroy() {
+        isRunning = false
         releaseWakeLock()
         super.onDestroy()
     }
@@ -75,13 +87,14 @@ class TerminalService : Service() {
     private fun createChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = getSystemService(NotificationManager::class.java)
-        if (manager.getNotificationChannel(CHANNEL_ID) != null) return
+        // Re-creating an existing channel only updates its name/description,
+        // which is how a language change reaches the system settings screen.
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "Sesiones en segundo plano",
+            NativeStrings.get(this, "fg_channel_name", R.string.fg_channel_name),
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
-            description = "Mantiene las terminales activas mientras la app está minimizada"
+            description = NativeStrings.get(this@TerminalService, "fg_channel_desc", R.string.fg_channel_desc)
             setShowBadge(false)
         }
         manager.createNotificationChannel(channel)
@@ -117,10 +130,10 @@ class TerminalService : Service() {
         }
 
         return builder
-            .setContentTitle("KAMMEL activo")
+            .setContentTitle(NativeStrings.get(this, "fg_title", R.string.fg_title))
             .setContentText(
-                if (held) "Wakelock activo · las tareas siguen con la pantalla apagada"
-                else "Las sesiones siguen ejecutándose en segundo plano",
+                if (held) NativeStrings.get(this, "fg_text_wakelock", R.string.fg_text_wakelock)
+                else NativeStrings.get(this, "fg_text", R.string.fg_text),
             )
             .setSmallIcon(R.drawable.ic_notification)
             .setOngoing(true)
@@ -128,10 +141,11 @@ class TerminalService : Service() {
             .setContentIntent(contentIntent)
             .addAction(
                 0,
-                if (held) "Liberar wakelock" else "Adquirir wakelock",
+                if (held) NativeStrings.get(this, "fg_release", R.string.fg_release)
+                else NativeStrings.get(this, "fg_acquire", R.string.fg_acquire),
                 wakeLockIntent,
             )
-            .addAction(0, "Salir", exitIntent)
+            .addAction(0, NativeStrings.get(this, "fg_exit", R.string.fg_exit), exitIntent)
             .build()
     }
 

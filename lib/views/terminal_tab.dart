@@ -794,7 +794,7 @@ class _TerminalTabState extends State<TerminalTab> with WidgetsBindingObserver {
       String dir;
       if (Platform.isAndroid &&
           await Directory('/storage/emulated/0/Download').exists()) {
-        dir = '/storage/emulated/0/Download/KAMMEL';
+        dir = '/storage/emulated/0/Download/ABSssh';
       } else {
         dir = (await getApplicationDocumentsDirectory()).path;
       }
